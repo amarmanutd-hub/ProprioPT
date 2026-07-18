@@ -580,10 +580,10 @@ const engine = new PerceptionEngine({
 
       const sample = biomech.evaluate(normalized, frame.timestampMs);
       if (sample) {
-        kneeAngleEl.textContent = (
+        kneeAngleEl.textContent = `${(
           (sample.angles.leftKnee + sample.angles.rightKnee) /
           2
-        ).toFixed(0);
+        ).toFixed(0)}°`;
       } else {
         kneeAngleEl.textContent = "—";
       }
