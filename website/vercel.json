@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "vite build",
+  "buildCommand": "npm --prefix ../pt-app ci && npm run build:full",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
