@@ -15,8 +15,8 @@ function run(cwd, command, args) {
   });
 }
 
-const app = run(ptApp, ptViteBin, ["--port", "5174", "--strictPort"]);
-const site = run(root, viteBin, ["--port", "5173", "--strictPort"]);
+const app = run(ptApp, ptViteBin, ["--host", "127.0.0.1", "--port", "5174", "--strictPort"]);
+const site = run(root, viteBin, ["--host", "127.0.0.1", "--port", "5173", "--strictPort"]);
 
 const stop = () => {
   app.kill("SIGTERM");
