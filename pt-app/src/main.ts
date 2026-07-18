@@ -161,8 +161,9 @@ if (carePlan?.notes) {
 if (packMode) {
   document.body.classList.add("pack-mode");
   document.title = "Proprio — Knee home pack";
-  if (packBadge) packBadge.hidden = false;
-  if (packProgress) packProgress.hidden = false;
+  // Chip + progress appear once the pack session starts (after camera calib).
+  if (packBadge) packBadge.hidden = true;
+  if (packProgress) packProgress.hidden = true;
   if (brandSub) {
     brandSub.textContent =
       "Five home exercises. Squats get form cues; the rest are counted. Stays on this device.";
@@ -312,6 +313,8 @@ function showPackSetup(): void {
   if (!move) return;
   const formCoached = move.mode === "form";
   const modeLabel = formCoached ? "Form coached" : "Counting only";
+  if (packBadge) packBadge.hidden = false;
+  if (packProgress) packProgress.hidden = false;
   if (packChipMode) {
     packChipMode.textContent = modeLabel;
     packChipMode.dataset.kind = formCoached ? "form" : "count";
