@@ -251,9 +251,20 @@ function setFlow(step: 1 | 2 | 3): void {
   s3.className = step === 3 ? "on" : "";
 }
 
-function setOverlay(visible: boolean, message: string): void {
+function setOverlay(visible: boolean, message: string, hint?: string): void {
   overlay.hidden = !visible;
   overlay.querySelector(".overlay-msg")!.textContent = message;
+  const hintEl = overlay.querySelector<HTMLParagraphElement>(".overlay-hint");
+  if (hintEl) {
+    if (hint !== undefined) {
+      hintEl.textContent = hint;
+      hintEl.hidden = !hint;
+    } else if (!visible) {
+      hintEl.textContent =
+        "Tilt it so the screen faces you, like a mirror on a stand.";
+      hintEl.hidden = false;
+    }
+  }
 }
 
 function setStatus(text: string, kind: "ok" | "warn" | "err" = "ok"): void {
@@ -545,7 +556,11 @@ const engine = new PerceptionEngine({
   bodyMode: "full",
   alerts: {
     onHalt: (reason, message) => {
-      setOverlay(true, message);
+      const hint =
+        reason === "camera"
+          ? "Allow camera access, or try a phone/laptop with a webcam."
+          : "Tilt it so the screen faces you, like a mirror on a stand.";
+      setOverlay(true, message, hint);
       setStatus(`Halted (${reason}): ${message}`, "err");
       ui.clear();
       ui.speakCue(message, "halt");
