@@ -13,3 +13,7 @@ posts/
 dart_helper/.dart_tool/
 dart_helper/pubspec.lock
 .gstack/
+.vercel/
+ProprioPT/
+*.bak.*
+.gstack/qa-reports/
