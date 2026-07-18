@@ -638,12 +638,23 @@ const engine = new PerceptionEngine({
             hint.framingOk ? "ok" : "warn",
           );
         } else if (phaseNow === "work") {
-          setStatus(
-            active?.mode === "form"
-              ? "Looking good — keep going at your own pace."
-              : "Counting only — form coaching comes later for this move.",
-            "ok",
-          );
+          const track = (
+            hint as { track?: "ok" | "weak" | "lost"; trackReason?: string }
+          ).track;
+          if (track === "lost" || track === "weak") {
+            setStatus(
+              (hint as { trackReason?: string }).trackReason ??
+                hint.phaseLabel,
+              track === "lost" ? "err" : "warn",
+            );
+          } else {
+            setStatus(
+              active?.mode === "form"
+                ? "Looking good — keep going at your own pace."
+                : "Counting only — form coaching comes later for this move.",
+              "ok",
+            );
+          }
         }
 
         syncPackButtons();

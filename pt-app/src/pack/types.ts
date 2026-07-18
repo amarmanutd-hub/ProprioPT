@@ -7,7 +7,12 @@ import type { JointLandmark } from "../perception/PerceptionEngine";
 import type { OrientationPolicy } from "../perception/PerceptionEngine";
 
 export type MoveMode = "form" | "rep_detect" | "timed";
-export type CameraSetup = "standing_front" | "standing_side" | "supine_side";
+export type CameraSetup =
+  | "standing_front"
+  | "standing_side"
+  | "floor_diagonal"
+  /** @deprecated use floor_diagonal */
+  | "supine_side";
 export type ExerciseStatus =
   | "pending"
   | "complete"
@@ -31,6 +36,8 @@ export interface MoveUpdateResult {
   flags: string[];
   phaseLabel: string;
   setComplete: boolean;
+  track?: "ok" | "weak" | "lost";
+  trackReason?: string;
 }
 
 export interface ExerciseMove {

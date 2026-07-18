@@ -2,6 +2,25 @@ import { describe, expect, it, vi } from "vitest";
 import { HeelSlideMove } from "./HeelSlideMove";
 import { limitsFromCarePlan, DEFAULT_LIMITS } from "../session/sessionBridge";
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
+import type { JointLandmark } from "../perception/PerceptionEngine";
+
+function lm(index: number, vis = 0.9): JointLandmark {
+  return {
+    index,
+    x: 0.5,
+    y: 0.5,
+    z: 0,
+    visibility: vis,
+    worldX: 0.5,
+    worldY: 0.5,
+    worldZ: 0,
+  };
+}
+
+/** Both lower chains visible — TrackConfidence ok. */
+function visibleLegs(): JointLandmark[] {
+  return [23, 24, 25, 26, 27, 28].map((i) => lm(i));
+}
 
 function sample(knee: number, t = 1000): BiomechanicalSample {
   return {
@@ -63,8 +82,8 @@ describe("HeelSlideMove", () => {
       onFlag,
     });
     // extend → start flexing past 100°
-    move.update([], sample(165), 1000);
-    const r = move.update([], sample(95), 1033);
+    move.update(visibleLegs(), sample(165), 1000);
+    const r = move.update(visibleLegs(), sample(95), 1033);
     expect(r.flags).toContain("overFlexion");
     expect(onFlag).toHaveBeenCalledWith(
       "overFlexion",
@@ -78,21 +97,21 @@ describe("HeelSlideMove", () => {
     let t = 1000;
     // warm baseline extended
     for (const k of [165, 164, 163, 162]) {
-      move.update([], sample(k, t), t);
+      move.update(visibleLegs(), sample(k, t), t);
       t += 33;
     }
     // slide in
     for (const k of [150, 140, 130, 120]) {
-      move.update([], sample(k, t), t);
+      move.update(visibleLegs(), sample(k, t), t);
       t += 33;
     }
     // straighten out
     for (const k of [130, 140, 150, 158, 162]) {
-      move.update([], sample(k, t), t);
+      move.update(visibleLegs(), sample(k, t), t);
       t += 33;
     }
     expect(onRep).toHaveBeenCalledWith(1);
-    expect(move.update([], sample(162, t), t).reps).toBe(1);
+    expect(move.update(visibleLegs(), sample(162, t), t).reps).toBe(1);
   });
 
   it("flags incompleteFlex on shallow slide (not incompleteReturn)", () => {
@@ -100,12 +119,12 @@ describe("HeelSlideMove", () => {
     const move = new HeelSlideMove({ targetReps: 5, onFlag });
     let t = 1000;
     for (const k of [165, 164, 163, 162]) {
-      move.update([], sample(k, t), t);
+      move.update(visibleLegs(), sample(k, t), t);
       t += 33;
     }
-    // ~14° flex then return (below 25° depth target)
-    for (const k of [155, 150, 148, 155, 160, 163]) {
-      move.update([], sample(k, t), t);
+    // ~14° flex then return (below 25° depth target) — enough frames for OneEuro
+    for (const k of [155, 152, 150, 148, 149, 152, 155, 158, 160, 163]) {
+      move.update(visibleLegs(), sample(k, t), t);
       t += 33;
     }
     expect(onFlag).toHaveBeenCalledWith(
@@ -126,7 +145,7 @@ describe("HeelSlideMove", () => {
     let t = 1000;
     // Warm with matched knees
     for (const k of [165, 164, 163]) {
-      move.update([], sample(k, t), t);
+      move.update(visibleLegs(), sample(k, t), t);
       t += 33;
     }
     // Left stays extended, right slides — should track right only
@@ -142,7 +161,7 @@ describe("HeelSlideMove", () => {
       [162, 125],
       [162, 120],
     ] as const) {
-      move.update([], asymmetric(L, R), t);
+      move.update(visibleLegs(), asymmetric(L, R), t);
       t += 33;
     }
     for (const [L, R] of [
@@ -150,9 +169,9 @@ describe("HeelSlideMove", () => {
       [162, 150],
       [162, 160],
     ] as const) {
-      move.update([], asymmetric(L, R), t);
+      move.update(visibleLegs(), asymmetric(L, R), t);
       t += 33;
     }
-    expect(move.update([], asymmetric(162, 162), t).reps).toBe(1);
+    expect(move.update(visibleLegs(), asymmetric(162, 162), t).reps).toBe(1);
   });
 });

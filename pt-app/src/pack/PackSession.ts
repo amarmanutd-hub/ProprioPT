@@ -119,7 +119,13 @@ export class PackSession {
     landmarks: JointLandmark[],
     sample: BiomechanicalSample | null,
     t: number,
-  ): { phaseLabel: string; framingOk: boolean; framingReason?: string } {
+  ): {
+    phaseLabel: string;
+    framingOk: boolean;
+    framingReason?: string;
+    track?: "ok" | "weak" | "lost";
+    trackReason?: string;
+  } {
     const move = this.getActive();
     if (!move || this.phase === "done" || this.phase === "setup") {
       return {
@@ -145,8 +151,9 @@ export class PackSession {
     }
 
     if (this.phase === "framing") {
+      const cam = move.setup.camera;
       const check =
-        move.setup.camera === "supine_side"
+        cam === "floor_diagonal" || cam === "supine_side"
           ? checkSupineSideFraming(landmarks)
           : checkStandingFraming(landmarks);
       if (check.ok) {
@@ -174,6 +181,8 @@ export class PackSession {
           ? `${result.phaseLabel} · set ${this.setIndex + 1}/${sets}`
           : result.phaseLabel,
       framingOk: true,
+      track: result.track,
+      trackReason: result.trackReason,
     };
   }
 

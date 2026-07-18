@@ -141,8 +141,11 @@ export class BiomechanicalEvaluator {
     const torsoLength = measureTorsoLength(map);
     if (torsoLength < 1e-6) return null;
 
-    // Floor/side views often lose one shoulder — anchor still works off hips + best shoulder.
-    const midHip = midWorld(map.get(L_HIP), map.get(R_HIP));
+    // Floor/diagonal views often lose one shoulder/hip — anchor off best points.
+    const midHip =
+      midWorld(map.get(L_HIP), map.get(R_HIP)) ??
+      visibleWorld(map.get(L_HIP)) ??
+      visibleWorld(map.get(R_HIP));
     if (!midHip) return null;
     const midSh =
       midWorld(map.get(L_SH), map.get(R_SH)) ??
@@ -328,31 +331,37 @@ export function jointAngleDeg(a: Vec3, b: Vec3, c: Vec3): number {
   return (Math.acos(cos) * 180) / Math.PI;
 }
 
+function chainOk(
+  map: Map<number, JointLandmark>,
+  hip: number,
+  kn: number,
+  ank: number,
+): boolean {
+  return (
+    visibleEnough(map.get(hip)) &&
+    visibleEnough(map.get(kn)) &&
+    visibleEnough(map.get(ank))
+  );
+}
+
 function computeAngleMatrix(
   map: Map<number, JointLandmark>,
 ): JointAngleMatrix | null {
-  // Floor/side packs: occluded far-side wrists/elbows were nulling the whole
-  // sample → heel slides stuck on "Waiting for pose". Knees only need the
-  // hip–knee–ankle chain; arms are optional with neutral fill-ins.
-  const lower = [L_HIP, R_HIP, L_KN, R_KN, L_ANK, R_ANK];
-  for (const i of lower) {
-    if (!visibleEnough(map.get(i))) return null;
-  }
+  // Floor/diagonal: far leg often occluded. Need ≥1 hip–knee–ankle chain;
+  // arms optional. Mirror the good chain onto the missing side so moves that
+  // average or pickWorkingKnee still see a stable signal.
+  const leftOk = chainOk(map, L_HIP, L_KN, L_ANK);
+  const rightOk = chainOk(map, R_HIP, R_KN, R_ANK);
+  if (!leftOk && !rightOk) return null;
 
-  const lHipLm = map.get(L_HIP)!;
+  const anchorHip = map.get(leftOk ? L_HIP : R_HIP)!;
   const probe =
     (visibleEnough(map.get(L_SH)) ? len(asWorld(map.get(L_SH)!)) : 0) +
-    len(asWorld(lHipLm));
+    (visibleEnough(map.get(R_SH)) ? len(asWorld(map.get(R_SH)!)) : 0) +
+    len(asWorld(anchorHip));
   const useImage = probe < 1e-6;
   const pt = (lm: JointLandmark): Vec3 =>
     useImage ? { x: lm.x, y: lm.y, z: lm.z } : asWorld(lm);
-
-  const LHip = pt(map.get(L_HIP)!);
-  const RHip = pt(map.get(R_HIP)!);
-  const LKn = pt(map.get(L_KN)!);
-  const RKn = pt(map.get(R_KN)!);
-  const LAnk = pt(map.get(L_ANK)!);
-  const RAnk = pt(map.get(R_ANK)!);
 
   const LShLm = map.get(L_SH);
   const RShLm = map.get(R_SH);
@@ -368,44 +377,73 @@ function computeAngleMatrix(
   const LWr = visibleEnough(LWrLm) ? pt(LWrLm!) : null;
   const RWr = visibleEnough(RWrLm) ? pt(RWrLm!) : null;
 
+  let leftKnee = 170;
+  let rightKnee = 170;
+  let leftHip = 170;
+  let rightHip = 170;
+
+  if (leftOk) {
+    const LHip = pt(map.get(L_HIP)!);
+    const LKn = pt(map.get(L_KN)!);
+    const LAnk = pt(map.get(L_ANK)!);
+    leftKnee = jointAngleDeg(LHip, LKn, LAnk);
+    leftHip = LSh ? jointAngleDeg(LSh, LHip, LKn) : 170;
+  }
+  if (rightOk) {
+    const RHip = pt(map.get(R_HIP)!);
+    const RKn = pt(map.get(R_KN)!);
+    const RAnk = pt(map.get(R_ANK)!);
+    rightKnee = jointAngleDeg(RHip, RKn, RAnk);
+    rightHip = RSh ? jointAngleDeg(RSh, RHip, RKn) : 170;
+  }
+  if (leftOk && !rightOk) {
+    rightKnee = leftKnee;
+    rightHip = leftHip;
+  } else if (rightOk && !leftOk) {
+    leftKnee = rightKnee;
+    leftHip = rightHip;
+  }
+
   return {
-    leftElbow:
-      LSh && LEl && LWr ? jointAngleDeg(LSh, LEl, LWr) : 160,
-    rightElbow:
-      RSh && REl && RWr ? jointAngleDeg(RSh, REl, RWr) : 160,
+    leftElbow: LSh && LEl && LWr ? jointAngleDeg(LSh, LEl, LWr) : 160,
+    rightElbow: RSh && REl && RWr ? jointAngleDeg(RSh, REl, RWr) : 160,
     leftShoulder:
-      LHip && LSh && LEl ? jointAngleDeg(LHip, LSh, LEl) : 40,
+      leftOk && LSh && LEl
+        ? jointAngleDeg(pt(map.get(L_HIP)!), LSh, LEl)
+        : 40,
     rightShoulder:
-      RHip && RSh && REl ? jointAngleDeg(RHip, RSh, REl) : 40,
-    leftHip: LSh ? jointAngleDeg(LSh, LHip, LKn) : 170,
-    rightHip: RSh ? jointAngleDeg(RSh, RHip, RKn) : 170,
-    leftKnee: jointAngleDeg(LHip, LKn, LAnk),
-    rightKnee: jointAngleDeg(RHip, RKn, RAnk),
+      rightOk && RSh && REl
+        ? jointAngleDeg(pt(map.get(R_HIP)!), RSh, REl)
+        : 40,
+    leftHip,
+    rightHip,
+    leftKnee,
+    rightKnee,
   };
 }
 
 function measureTorsoLength(map: Map<number, JointLandmark>): number {
-  const midSh = midWorld(map.get(L_SH), map.get(R_SH));
-  const midHip = midWorld(map.get(L_HIP), map.get(R_HIP));
+  const midSh =
+    midWorld(map.get(L_SH), map.get(R_SH)) ??
+    visibleWorld(map.get(L_SH)) ??
+    visibleWorld(map.get(R_SH));
+  const midHip =
+    midWorld(map.get(L_HIP), map.get(R_HIP)) ??
+    visibleWorld(map.get(L_HIP)) ??
+    visibleWorld(map.get(R_HIP));
   if (!midSh || !midHip) return 0;
   let d = len(sub(midSh, midHip));
   if (d > 1e-6) return d;
-  // Image fallback
-  const lSh = map.get(L_SH)!;
-  const rSh = map.get(R_SH)!;
-  const lHip = map.get(L_HIP)!;
-  const rHip = map.get(R_HIP)!;
-  const sh = {
-    x: (lSh.x + rSh.x) / 2,
-    y: (lSh.y + rSh.y) / 2,
-    z: (lSh.z + rSh.z) / 2,
-  };
-  const hip = {
-    x: (lHip.x + rHip.x) / 2,
-    y: (lHip.y + rHip.y) / 2,
-    z: (lHip.z + rHip.z) / 2,
-  };
-  return len(sub(sh, hip));
+  // Image fallback — need at least one shoulder + one hip
+  const shLm = map.get(L_SH) ?? map.get(R_SH);
+  const hipLm = map.get(L_HIP) ?? map.get(R_HIP);
+  if (!shLm || !hipLm) return 0;
+  return len(
+    sub(
+      { x: shLm.x, y: shLm.y, z: shLm.z },
+      { x: hipLm.x, y: hipLm.y, z: hipLm.z },
+    ),
+  );
 }
 
 function axisStdMax(points: Vec3[]): number {

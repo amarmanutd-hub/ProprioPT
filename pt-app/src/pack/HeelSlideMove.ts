@@ -1,12 +1,18 @@
 /**
  * Heel slides — form-coached ROM cycle (incomplete flex + over-flexion).
- * Side camera: lock onto one working knee (prescribed side or first clear asymmetry).
+ * Floor diagonal: working-limb lock + track confidence + angle smooth.
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
 import type { JointLandmark } from "../perception/PerceptionEngine";
+import { OneEuroAngle } from "../tracking/OneEuroAngle";
+import { assessTrack } from "../tracking/TrackConfidence";
+import {
+  pickWorkingKnee,
+  type LockedKnee,
+  type WorkingSide,
+} from "../tracking/workingLimb";
 import type { ExerciseMove, MoveDosing, MoveSetup, MoveUpdateResult } from "./types";
-import type { WorkingSide } from "./workingSide";
 
 export interface HeelSlideMoveOptions {
   targetReps?: number;
@@ -16,16 +22,14 @@ export interface HeelSlideMoveOptions {
   onRep?: (repIndex: number) => void;
 }
 
-type LockedKnee = "left" | "right";
-
 export class HeelSlideMove implements ExerciseMove {
   readonly id = "heel_slide";
   readonly title = "Heel slides";
   readonly mode = "form" as const;
   readonly dosing: MoveDosing;
   readonly setup: MoveSetup = {
-    camera: "supine_side",
-    copy: "Lie on your back. Phone on its side — hips to feet in frame. Move only one heel; keep the other leg still.",
+    camera: "floor_diagonal",
+    copy: "Lie on your back. Phone diagonal (~30–45°) — working leg nearer camera, hips to feet in frame. Slide that heel in, then straighten.",
   };
   readonly orientation = "relaxed_floor" as const;
 
@@ -34,6 +38,7 @@ export class HeelSlideMove implements ExerciseMove {
   private readonly side: WorkingSide;
   private readonly onFlag?: (kind: string, detail: string) => void;
   private readonly onRep?: (repIndex: number) => void;
+  private readonly kneeFilter = new OneEuroAngle(2.8, 0.04, 1.0);
 
   private reps = 0;
   private phase: "extend" | "flex" = "extend";
@@ -42,13 +47,11 @@ export class HeelSlideMove implements ExerciseMove {
   private setComplete = false;
   private overLogged = false;
   private shallowLatched = false;
-  /** Resolved working knee for this set (side view L/R is unreliable until locked). */
   private locked: LockedKnee | null = null;
 
   constructor(options: HeelSlideMoveOptions = {}) {
     this.targetReps = options.targetReps ?? 10;
     this.dosing = { sets: 2, reps: this.targetReps };
-    // max flexion deg → min knee angle (straight ≈ 180)
     this.minKneeAngle = options.maxKneeFlexionDeg ?? 90;
     this.side = options.side ?? "bilateral";
     this.onFlag = options.onFlag;
@@ -66,26 +69,51 @@ export class HeelSlideMove implements ExerciseMove {
     this.shallowLatched = false;
     this.locked =
       this.side === "left" || this.side === "right" ? this.side : null;
+    this.kneeFilter.reset();
   }
 
   update(
     landmarks: JointLandmark[],
     sample: BiomechanicalSample | null,
-    _t: number,
+    t: number,
   ): MoveUpdateResult {
-    if (this.setComplete || !sample) {
+    const track = assessTrack(landmarks, this.locked, this.side);
+
+    if (this.setComplete) {
       return {
         reps: this.reps,
         flags: [],
-        phaseLabel: this.setComplete ? "Set complete" : "Waiting for pose",
-        setComplete: this.setComplete,
+        phaseLabel: "Set complete",
+        setComplete: true,
+        track: "ok",
       };
     }
 
-    const knee = this.pickWorkingKnee(landmarks, sample);
+    if (track.level === "lost" || !sample) {
+      return {
+        reps: this.reps,
+        flags: [],
+        phaseLabel: track.reason || "Tracking lost — show the working leg",
+        setComplete: false,
+        track: "lost",
+        trackReason: track.reason,
+      };
+    }
+
+    const picked = pickWorkingKnee(
+      landmarks,
+      sample.angles.leftKnee,
+      sample.angles.rightKnee,
+      this.side,
+      this.locked,
+    );
+    if (picked.lock) this.locked = picked.lock;
+    const rawKnee = picked.knee;
+    const knee = this.kneeFilter.filter(rawKnee, t);
     const flags: string[] = [];
 
-    if (knee < this.minKneeAngle - 2) {
+    // Clinical limit on raw angle — filter must not delay safety cues.
+    if (rawKnee < this.minKneeAngle - 2) {
       flags.push("overFlexion");
       if (!this.overLogged) {
         this.overLogged = true;
@@ -97,11 +125,12 @@ export class HeelSlideMove implements ExerciseMove {
     }
 
     if (this.phase === "extend") {
-      if (knee > 140) {
+      // Refresh standing baseline only near extension — not while sliding.
+      if (knee >= this.baselineKnee - 8) {
         this.baselineKnee = this.baselineKnee * 0.9 + knee * 0.1;
       }
-      // Track deepest during this attempt
-      if (knee < this.minThisRep) this.minThisRep = knee;
+      // Track deepest on raw so filter lag doesn't hide incomplete flex.
+      if (rawKnee < this.minThisRep) this.minThisRep = rawKnee;
 
       const flexedEnough = knee <= this.baselineKnee - 25;
       if (flexedEnough) {
@@ -111,17 +140,22 @@ export class HeelSlideMove implements ExerciseMove {
         return {
           reps: this.reps,
           flags,
-          phaseLabel: "Straighten the knee",
+          phaseLabel:
+            track.level === "weak"
+              ? track.reason
+              : "Straighten the knee",
           setComplete: false,
+          track: track.level,
+          trackReason: track.reason,
         };
       }
 
-      // Shallow attempt: dipped then returned without reaching depth target
       const attempt = this.baselineKnee - this.minThisRep;
+      // Fire when they abandon the shallow attempt (re-extend ≥8° from trough).
       if (
         attempt >= 10 &&
         attempt < 25 &&
-        knee >= this.baselineKnee - 10 &&
+        rawKnee >= this.minThisRep + 8 &&
         this.minThisRep < 180
       ) {
         flags.push("incompleteFlex");
@@ -133,7 +167,11 @@ export class HeelSlideMove implements ExerciseMove {
           );
         }
         this.minThisRep = 180;
-      } else if (knee >= this.baselineKnee - 5) {
+      } else if (
+        rawKnee >= this.baselineKnee - 5 &&
+        this.baselineKnee - this.minThisRep < 10
+      ) {
+        // Clear only if we never made a meaningful flex attempt.
         this.minThisRep = 180;
         this.shallowLatched = false;
       }
@@ -141,12 +179,14 @@ export class HeelSlideMove implements ExerciseMove {
       return {
         reps: this.reps,
         flags,
-        phaseLabel: "Slide heel in",
+        phaseLabel:
+          track.level === "weak" ? track.reason : "Slide heel in",
         setComplete: false,
+        track: track.level,
+        trackReason: track.reason,
       };
     }
 
-    // flex phase — returning toward extension (depth already earned)
     if (knee < this.minThisRep) this.minThisRep = knee;
     const returned = knee >= this.baselineKnee - 12;
     if (returned) {
@@ -162,36 +202,14 @@ export class HeelSlideMove implements ExerciseMove {
     return {
       reps: this.reps,
       flags,
-      phaseLabel: this.setComplete ? "Set complete" : "Straighten the knee",
+      phaseLabel: this.setComplete
+        ? "Set complete"
+        : track.level === "weak"
+          ? track.reason
+          : "Straighten the knee",
       setComplete: this.setComplete,
+      track: track.level,
+      trackReason: track.reason,
     };
-  }
-
-  /** Prefer prescribed side; else lock to the clearly moving (more flexed) knee. */
-  private pickWorkingKnee(
-    landmarks: JointLandmark[],
-    sample: BiomechanicalSample,
-  ): number {
-    const L = sample.angles.leftKnee;
-    const R = sample.angles.rightKnee;
-
-    if (this.locked === "left") return L;
-    if (this.locked === "right") return R;
-
-    const map = new Map(landmarks.map((l) => [l.index, l]));
-    const lv = map.get(25)?.visibility ?? 0;
-    const rv = map.get(26)?.visibility ?? 0;
-
-    // Working heel is usually more flexed once the slide starts.
-    if (Math.abs(L - R) >= 18) {
-      this.locked = L < R ? "left" : "right";
-      return this.locked === "left" ? L : R;
-    }
-
-    // Ignore a ghost/occluded joint in side view.
-    if (lv > 0.35 && rv < 0.22) return L;
-    if (rv > 0.35 && lv < 0.22) return R;
-
-    return lv >= rv ? L : R;
   }
 }

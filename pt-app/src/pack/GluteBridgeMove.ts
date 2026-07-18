@@ -5,6 +5,7 @@
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
 import type { JointLandmark } from "../perception/PerceptionEngine";
+import { assessTrack } from "../tracking/TrackConfidence";
 import type { ExerciseMove, MoveDosing, MoveSetup, MoveUpdateResult } from "./types";
 
 export interface GluteBridgeMoveOptions {
@@ -17,8 +18,10 @@ export interface GluteBridgeMoveOptions {
 function midHipY(landmarks: JointLandmark[]): number | null {
   const l = landmarks.find((p) => p.index === 23 && p.visibility >= 0.3);
   const r = landmarks.find((p) => p.index === 24 && p.visibility >= 0.3);
-  if (!l || !r) return null;
-  return (l.y + r.y) / 2;
+  if (l && r) return (l.y + r.y) / 2;
+  if (l) return l.y;
+  if (r) return r.y;
+  return null;
 }
 
 function hipSkew(landmarks: JointLandmark[]): number | null {
@@ -34,8 +37,8 @@ export class GluteBridgeMove implements ExerciseMove {
   readonly mode = "form" as const;
   readonly dosing: MoveDosing;
   readonly setup: MoveSetup = {
-    camera: "supine_side",
-    copy: "Lie on your back, phone on its side. Drive through heels, lift hips, hold briefly, then lower.",
+    camera: "floor_diagonal",
+    copy: "Lie on your back. Phone diagonal — hips nearer center of frame. Drive through heels, lift, hold briefly, then lower.",
   };
   readonly orientation = "relaxed_floor" as const;
 
@@ -78,23 +81,42 @@ export class GluteBridgeMove implements ExerciseMove {
     sample: BiomechanicalSample | null,
     t: number,
   ): MoveUpdateResult {
-    if (this.setComplete || !sample) {
+    const track = assessTrack(landmarks, null, undefined);
+
+    if (this.setComplete) {
       return {
         reps: this.reps,
         flags: [],
-        phaseLabel: this.setComplete ? "Set complete" : "Waiting for pose",
-        setComplete: this.setComplete,
+        phaseLabel: "Set complete",
+        setComplete: true,
+        track: "ok",
+      };
+    }
+
+    if (track.level === "lost" || !sample) {
+      return {
+        reps: this.reps,
+        flags: [],
+        phaseLabel: track.reason || "Tracking lost — hips and legs in frame",
+        setComplete: false,
+        track: "lost",
+        trackReason: track.reason,
       };
     }
 
     const y = midHipY(landmarks);
     const flags: string[] = [];
+    const label = (ok: string) =>
+      track.level === "weak" ? track.reason : ok;
+
     if (y == null) {
       return {
         reps: this.reps,
         flags,
         phaseLabel: "Hips in frame",
         setComplete: false,
+        track: "weak",
+        trackReason: "Hips in frame",
       };
     }
 
@@ -115,8 +137,10 @@ export class GluteBridgeMove implements ExerciseMove {
       return {
         reps: this.reps,
         flags,
-        phaseLabel: "Lift hips",
+        phaseLabel: label("Lift hips"),
         setComplete: false,
+        track: track.level,
+        trackReason: track.reason,
       };
     }
 
@@ -153,8 +177,10 @@ export class GluteBridgeMove implements ExerciseMove {
       return {
         reps: this.reps,
         flags,
-        phaseLabel: "Drive hips up",
+        phaseLabel: label("Drive hips up"),
         setComplete: false,
+        track: track.level,
+        trackReason: track.reason,
       };
     }
 
@@ -184,16 +210,20 @@ export class GluteBridgeMove implements ExerciseMove {
       return {
         reps: this.reps,
         flags,
-        phaseLabel: this.setComplete ? "Set complete" : "Lift hips",
+        phaseLabel: this.setComplete ? "Set complete" : label("Lift hips"),
         setComplete: this.setComplete,
+        track: track.level,
+        trackReason: track.reason,
       };
     }
 
     return {
       reps: this.reps,
       flags,
-      phaseLabel: `Hold ${Math.min(held, this.holdSec).toFixed(1)}s`,
+      phaseLabel: label(`Hold ${Math.min(held, this.holdSec).toFixed(1)}s`),
       setComplete: false,
+      track: track.level,
+      trackReason: track.reason,
     };
   }
 }

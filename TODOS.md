@@ -22,6 +22,15 @@
 
 ## Backlog
 
+### Kaia-style floor setup wizard
+
+**What:** Optional phone-prop / distance / silhouette coaching before floor moves (Approach B from tracking-smooth design).
+**Why:** Competitors invest heavily in setup UX; geometry+confidence ships first but first-time PT patients still may place the camera wrong.
+**Context:** Deferred by plan-eng-review 2026-07-18. Implement after TrackConfidence + floor_diagonal + one-leg biomech. See `~/.gstack/projects/Proprio/amarmalhi-master-design-tracking-smooth-20260718-155444.md`.
+**Effort:** M
+**Priority:** P3
+**Depends on:** Tracking smoothness floor-first PR
+
 ### Dedicated form cue WAVs
 
 **What:** Record/add WAVs for bentKnee, incompleteLift, overFlexion, incompleteRise, incompleteFlex.

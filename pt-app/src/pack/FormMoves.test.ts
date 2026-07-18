@@ -38,6 +38,17 @@ function lm(index: number, x: number, y: number): JointLandmark {
   return { index, x, y, z: 0, visibility: 0.9, worldX: x, worldY: y, worldZ: 0 };
 }
 
+function legs(): JointLandmark[] {
+  return [
+    lm(23, 0.4, 0.4),
+    lm(24, 0.45, 0.42),
+    lm(25, 0.5, 0.55),
+    lm(26, 0.55, 0.57),
+    lm(27, 0.6, 0.7),
+    lm(28, 0.65, 0.72),
+  ];
+}
+
 describe("StepUpMove", () => {
   it("counts a flex → rise cycle", () => {
     const onRep = vi.fn();
@@ -56,11 +67,11 @@ describe("SlrMove", () => {
     const onFlag = vi.fn();
     const move = new SlrMove({ targetReps: 5, onFlag });
     let t = 1000;
-    move.update([], sample(168, t, 165), t);
+    move.update(legs(), sample(168, t, 165), t);
     t += 33;
-    move.update([], sample(168, t, 140), t); // enter up
+    move.update(legs(), sample(168, t, 140), t); // enter up
     t += 33;
-    const r = move.update([], sample(130, t, 130), t); // bent
+    const r = move.update(legs(), sample(130, t, 130), t); // bent
     expect(r.flags).toContain("bentKnee");
     expect(onFlag).toHaveBeenCalledWith("bentKnee", expect.stringContaining("straight"));
   });

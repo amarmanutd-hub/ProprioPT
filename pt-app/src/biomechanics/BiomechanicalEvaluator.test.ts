@@ -47,9 +47,25 @@ describe("BiomechanicalEvaluator floor/side path", () => {
     expect(s!.angles.rightKnee).toBeGreaterThan(0);
   });
 
+  it("yields a sample when only one leg chain is visible", () => {
+    const e = new BiomechanicalEvaluator();
+    // Far (right) chain occluded
+    const marks = sideLyingLandmarks().map((m) => {
+      if ([12, 14, 16, 24, 26, 28].includes(m.index)) {
+        return { ...m, visibility: 0.05 };
+      }
+      return m;
+    });
+    const s = e.evaluate(marks, 1000);
+    expect(s).not.toBeNull();
+    expect(s!.angles.leftKnee).toBeGreaterThan(0);
+  });
+
   it("returns null when a knee chain is missing", () => {
     const e = new BiomechanicalEvaluator();
-    const marks = sideLyingLandmarks().filter((m) => m.index !== 26);
+    const marks = sideLyingLandmarks().map((m) =>
+      [25, 26].includes(m.index) ? { ...m, visibility: 0.05 } : m,
+    );
     expect(e.evaluate(marks, 1000)).toBeNull();
   });
 });
