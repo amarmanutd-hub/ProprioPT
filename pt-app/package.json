@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:harness": "npx tsx scripts/squat-harness.ts",
+    "test:pack-harness": "npx tsx scripts/pack-harness.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.21",

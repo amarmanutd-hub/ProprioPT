@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Proprio — Demo walkthrough</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/theater.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="bar">
+      <a class="wordmark" href="/">Proprio</a>
+      <p class="bar-note">Local demo — no login, nothing leaves this browser</p>
+      <nav class="bar-nav" aria-label="Demo roles">
+        <button type="button" class="tab on" data-view="pt" id="tab-pt">PT view</button>
+        <button type="button" class="tab" data-view="patient" id="tab-patient">Patient view</button>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section id="view-pt" class="view" aria-labelledby="pt-title">
+        <div class="panel">
+          <p class="eyebrow">Therapist</p>
+          <h1 id="pt-title">Build a home plan</h1>
+          <p class="lede">
+            Add exercises, generate a code, hand it to the patient. Same idea as
+            MedBridge — without making them create an account.
+          </p>
+
+          <label class="field">
+            <span>Patient name</span>
+            <input id="patient-name" type="text" value="Alex" autocomplete="off" />
+          </label>
+
+          <fieldset class="limits">
+            <legend>Clinical limits</legend>
+            <p class="limits-hint">These show first on the patient plan — hard stops for the session.</p>
+            <div class="limits-grid">
+              <label class="field">
+                <span>Side</span>
+                <select id="side">
+                  <option value="left">Left</option>
+                  <option value="right" selected>Right</option>
+                  <option value="bilateral">Bilateral</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Max knee flexion</span>
+                <div class="suffix-input">
+                  <input id="max-flexion" type="number" min="0" max="160" value="90" inputmode="numeric" />
+                  <span class="suffix">°</span>
+                </div>
+              </label>
+              <label class="field">
+                <span>Max knee extension deficit</span>
+                <div class="suffix-input">
+                  <input id="max-ext-deficit" type="number" min="0" max="30" value="0" inputmode="numeric" />
+                  <span class="suffix">°</span>
+                </div>
+              </label>
+              <label class="field">
+                <span>Stop if pain ≥</span>
+                <div class="suffix-input">
+                  <input id="pain-stop" type="number" min="0" max="10" value="5" inputmode="numeric" />
+                  <span class="suffix">/10</span>
+                </div>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="field">
+            <span>Notes (optional)</span>
+            <input id="notes" type="text" placeholder="Mini-squats only — stop if swelling" />
+          </label>
+
+          <div class="presets" aria-label="Add from knee pack">
+            <span class="presets-label">Quick add (knee pack)</span>
+            <div class="preset-row" id="presets"></div>
+          </div>
+
+          <ul class="ex-list" id="ex-list" aria-label="Exercises"></ul>
+
+          <button type="button" class="btn primary" id="create-invite">Generate access code</button>
+          <p class="error" id="pt-error" hidden></p>
+
+          <div class="invite" id="invite" hidden>
+            <p class="invite-kicker">Give this to your patient</p>
+            <p class="code mono" id="invite-code">PROP-0000</p>
+            <div class="invite-actions">
+              <button type="button" class="btn primary" id="open-patient">Open patient view</button>
+              <button type="button" class="btn ghost" id="copy-code">Copy code</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-patient" class="view" hidden aria-labelledby="patient-title">
+        <div class="panel">
+          <p class="eyebrow">Patient</p>
+          <h1 id="patient-title">Enter your access code</h1>
+          <p class="lede">One-time invite from your therapist. No password.</p>
+
+          <form class="code-form" id="code-form">
+            <label class="field">
+              <span>Code</span>
+              <div class="code-entry">
+                <span class="mono prefix">PROP-</span>
+                <input
+                  id="code-digits"
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="4"
+                  pattern="[0-9]{4}"
+                  placeholder="8492"
+                  autocomplete="off"
+                  required
+                />
+              </div>
+            </label>
+            <button type="submit" class="btn primary" id="activate">Continue</button>
+          </form>
+          <p class="error" id="patient-error" hidden></p>
+
+          <div class="plan" id="plan" hidden>
+            <h2 id="plan-greeting">Your plan</h2>
+            <div class="limits-card" id="plan-limits" aria-label="Clinical limits"></div>
+            <p class="muted" id="plan-notes"></p>
+            <ul class="ex-list" id="plan-list"></ul>
+            <a class="btn primary" id="start-session" href="#">Start session</a>
+            <p class="muted small">
+              Opens the camera coach on this device. Video stays here.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <a href="/">← Website</a>
+      <span>Demo theater · codes stored only in this browser</span>
+    </footer>
+
+    <script type="module" src="/src/theater.ts"></script>
+  </body>
+</html>

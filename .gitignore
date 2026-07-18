@@ -12,3 +12,4 @@ posts/
 # Dart helper build artifacts
 dart_helper/.dart_tool/
 dart_helper/pubspec.lock
+.gstack/
