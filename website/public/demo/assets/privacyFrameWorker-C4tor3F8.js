@@ -1,0 +1,1 @@
+(function(){"use strict";const s=self;s.onmessage=async n=>{const t=n.data;if(t.type==="frame"&&t.bitmap){const i=t.id??0,e=t.bitmap,o=e.width,p=e.height;e.close(),s.postMessage({type:"wiped",id:i,w:o,h:p});return}t.type==="ping"&&s.postMessage({type:"pong"})}})();

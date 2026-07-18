@@ -1,0 +1,29 @@
+{
+  "name": "proprio-portal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:workout": "WORKOUT_BASE=/workout/ npm --prefix ../pt-app run dev",
+    "dev:all": "npm run dev:workout & npm run dev",
+    "build:workout": "node scripts/build-workout.mjs",
+    "build": "tsc --noEmit && vite build",
+    "build:full": "npm run build:workout && npm run build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^0.21.2"
+  }
+}

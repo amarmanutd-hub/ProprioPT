@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Proprio">
+  <!-- Mark only  pairs with Fraunces Proprio wordmark on dark UI -->
+  <circle cx="32" cy="32" r="30" fill="#0c1418"/>
+  <circle cx="32" cy="32" r="22" fill="rgba(47,122,134,0.22)"/>
+  <g fill="none" stroke="#f2f6f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="14" r="3.2" fill="#f2f6f7" stroke="none"/>
+    <path d="M22 22h20"/>
+    <path d="M22 22l-6 12"/>
+    <path d="M42 22l6 12"/>
+    <path d="M32 22v14"/>
+    <path d="M32 36l-7 16"/>
+    <path d="M32 36l7 16"/>
+  </g>
+  <g fill="#f2f6f7">
+    <circle cx="22" cy="22" r="2.2"/>
+    <circle cx="42" cy="22" r="2.2"/>
+    <circle cx="16" cy="34" r="2"/>
+    <circle cx="48" cy="34" r="2"/>
+    <circle cx="32" cy="36" r="2.2"/>
+    <circle cx="25" cy="52" r="2"/>
+    <circle cx="39" cy="52" r="2"/>
+  </g>
+</svg>

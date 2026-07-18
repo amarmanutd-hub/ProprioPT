@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Proprio coaches home exercise form from a phone or laptop camera — so patients practice between visits the way you taught them. Video stays on their device."
+    />
+    <title>Proprio — Home exercise form between visits</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav">
+      <a class="wordmark" href="/">Proprio</a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#why">Why it matters</a>
+        <a href="#how">How it works</a>
+        <a href="#privacy">Privacy</a>
+      </nav>
+      <a class="btn btn-nav" href="/demo/?pack=knee-v1" data-demo="pack">Open knee pack</a>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="brand-mark">Proprio</p>
+          <h1 id="hero-title">Home exercise form, coached between visits.</h1>
+          <p class="lede">
+            You set the exercises and dosing. The patient enters a code — no
+            account to create — and practices with live form cues on their phone.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="/demo/?pack=knee-v1" data-demo="pack"
+              >Open knee pack</a
+            >
+            <a class="btn btn-ghost" href="#how">See how it works</a>
+          </div>
+        </div>
+        <div class="hero-stage" aria-hidden="true">
+          <canvas id="pose-canvas" width="720" height="900"></canvas>
+          <div class="hero-vignette"></div>
+        </div>
+      </section>
+
+      <section class="stats" id="why" aria-labelledby="stats-title">
+        <div class="section-head">
+          <h2 id="stats-title">The gap between prescription and practice</h2>
+          <p>
+            Most recovery happens between visits. That is where form, adherence,
+            and outcomes slip — and where Proprio sits.
+          </p>
+        </div>
+        <ul class="stat-grid">
+          <li>
+            <span class="stat-value" data-count="1.71" data-suffix="B">0</span>
+            <span class="stat-label"
+              >people worldwide live with musculoskeletal conditions — the
+              leading cause of disability (WHO)</span
+            >
+          </li>
+          <li>
+            <span class="stat-value" data-count="70" data-suffix="%">0</span>
+            <span class="stat-label"
+              >home exercise non-adherence reported as high as 70% in rehab
+              literature</span
+            >
+          </li>
+          <li>
+            <span class="stat-value" data-count="76" data-suffix="%">0</span>
+            <span class="stat-label"
+              >of Americans surveyed did not complete all assigned at-home PT
+              exercises (Ohio State Wexner)</span
+            >
+          </li>
+          <li>
+            <span class="stat-value" data-count="12070" data-suffix="">0</span>
+            <span class="stat-label"
+              >FTE physical therapist shortfall in the U.S. (APTA, 2022) —
+              clinics need leverage between visits</span
+            >
+          </li>
+        </ul>
+        <p class="stat-footnote">
+          Sources: WHO musculoskeletal fact sheet; Disability &amp; Rehabilitation
+          / MSK literature on HEP adherence; Ohio State Wexner survey; APTA
+          workforce forecast 2022–2037.
+        </p>
+      </section>
+
+      <section class="how" id="how" aria-labelledby="how-title">
+        <div class="section-head">
+          <h2 id="how-title">You write the plan. They use a code.</h2>
+          <p>
+            Same idea as MedBridge-style HEP invites — without making the patient
+            build an account first.
+          </p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="step-num">01</span>
+            <h3>PT builds the session</h3>
+            <p>
+              Pick exercises, reps, and dosing. Proprio generates an access code
+              (and optional link) for that patient.
+            </p>
+          </li>
+          <li>
+            <span class="step-num">02</span>
+            <h3>Patient enters the code</h3>
+            <p>
+              On their phone or laptop — camera on, short setup, then the moves
+              you assigned. Squats get live form cues; other moves are counted
+              clearly.
+            </p>
+          </li>
+          <li>
+            <span class="step-num">03</span>
+            <h3>Summary stays with them</h3>
+            <p>
+              Reps, status, and form notes show on screen. Video never uploads.
+              They can save a copy to share back if you want it.
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+        <div class="privacy-panel">
+          <h2 id="privacy-title">Their video never uploads.</h2>
+          <p>
+            Pose runs on the device. Feedback and the session summary use joint
+            data — not a cloud recording of the patient.
+          </p>
+          <ul class="privacy-points">
+            <li>Local pose pipeline</li>
+            <li>No silent video trail</li>
+            <li>Share only what they choose to save</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="close" id="demo" aria-labelledby="close-title">
+        <h2 id="close-title">Try the knee pack yourself.</h2>
+        <p>
+          Same link you’d send a patient — about ten minutes with a phone and a
+          clear floor.
+        </p>
+        <a class="btn btn-primary btn-lg" href="/demo/?pack=knee-v1" data-demo="pack"
+          >Open knee pack</a
+        >
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span class="wordmark">Proprio</span>
+      <p>© <span id="year"></span> Proprio. Home exercise form between visits.</p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
