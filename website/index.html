@@ -21,7 +21,17 @@
 
     <header class="nav">
       <a class="wordmark" href="/">Proprio</a>
-      <nav class="nav-links" aria-label="Primary">
+      <button
+        type="button"
+        class="nav-toggle"
+        id="nav-toggle"
+        aria-expanded="false"
+        aria-controls="primary-nav"
+        aria-label="Open menu"
+      >
+        <span class="nav-toggle-bars" aria-hidden="true"></span>
+      </button>
+      <nav class="nav-links" id="primary-nav" aria-label="Primary">
         <a href="#why">Why it matters</a>
         <a href="#how">How it works</a>
         <a href="#privacy">Privacy</a>
@@ -62,28 +72,28 @@
         </div>
         <ul class="stat-grid">
           <li>
-            <span class="stat-value" data-count="1.71" data-suffix="B">0</span>
+            <span class="stat-value" data-count="1.71" data-suffix="B">1.71B</span>
             <span class="stat-label"
               >people worldwide live with musculoskeletal conditions — the
               leading cause of disability (WHO)</span
             >
           </li>
           <li>
-            <span class="stat-value" data-count="70" data-suffix="%">0</span>
+            <span class="stat-value" data-count="70" data-suffix="%">70%</span>
             <span class="stat-label"
               >home exercise non-adherence reported as high as 70% in rehab
               literature</span
             >
           </li>
           <li>
-            <span class="stat-value" data-count="76" data-suffix="%">0</span>
+            <span class="stat-value" data-count="76" data-suffix="%">76%</span>
             <span class="stat-label"
               >of Americans surveyed did not complete all assigned at-home PT
               exercises (Ohio State Wexner)</span
             >
           </li>
           <li>
-            <span class="stat-value" data-count="12070" data-suffix="">0</span>
+            <span class="stat-value" data-count="12070" data-suffix="">12,070</span>
             <span class="stat-label"
               >FTE physical therapist shortfall in the U.S. (APTA, 2022) —
               clinics need leverage between visits</span
