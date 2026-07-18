@@ -141,9 +141,14 @@ export class BiomechanicalEvaluator {
     const torsoLength = measureTorsoLength(map);
     if (torsoLength < 1e-6) return null;
 
-    const midSh = midWorld(map.get(L_SH), map.get(R_SH));
+    // Floor/side views often lose one shoulder — anchor still works off hips + best shoulder.
     const midHip = midWorld(map.get(L_HIP), map.get(R_HIP));
-    if (!midSh || !midHip) return null;
+    if (!midHip) return null;
+    const midSh =
+      midWorld(map.get(L_SH), map.get(R_SH)) ??
+      visibleWorld(map.get(L_SH)) ??
+      visibleWorld(map.get(R_SH)) ??
+      midHip;
 
     this.pushAnchor(midSh, midHip);
     const anchorDriftRatio = this.computeAnchorDriftRatio(torsoLength);
@@ -294,6 +299,15 @@ function midWorld(
   };
 }
 
+function visibleWorld(lm: JointLandmark | undefined): Vec3 | null {
+  if (!lm || lm.visibility < 0.25) return null;
+  return asWorld(lm);
+}
+
+function visibleEnough(lm: JointLandmark | undefined, minVis = 0.25): boolean {
+  return !!lm && lm.visibility >= minVis;
+}
+
 function sub(a: Vec3, b: Vec3): Vec3 {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
 }
@@ -317,37 +331,22 @@ export function jointAngleDeg(a: Vec3, b: Vec3, c: Vec3): number {
 function computeAngleMatrix(
   map: Map<number, JointLandmark>,
 ): JointAngleMatrix | null {
-  const need = [
-    L_SH,
-    R_SH,
-    L_EL,
-    R_EL,
-    L_WR,
-    R_WR,
-    L_HIP,
-    R_HIP,
-    L_KN,
-    R_KN,
-    L_ANK,
-    R_ANK,
-  ];
-  for (const i of need) {
-    const lm = map.get(i);
-    if (!lm || lm.visibility < 0.25) return null;
+  // Floor/side packs: occluded far-side wrists/elbows were nulling the whole
+  // sample → heel slides stuck on "Waiting for pose". Knees only need the
+  // hip–knee–ankle chain; arms are optional with neutral fill-ins.
+  const lower = [L_HIP, R_HIP, L_KN, R_KN, L_ANK, R_ANK];
+  for (const i of lower) {
+    if (!visibleEnough(map.get(i))) return null;
   }
 
+  const lHipLm = map.get(L_HIP)!;
   const probe =
-    len(asWorld(map.get(L_SH)!)) + len(asWorld(map.get(L_HIP)!));
+    (visibleEnough(map.get(L_SH)) ? len(asWorld(map.get(L_SH)!)) : 0) +
+    len(asWorld(lHipLm));
   const useImage = probe < 1e-6;
   const pt = (lm: JointLandmark): Vec3 =>
     useImage ? { x: lm.x, y: lm.y, z: lm.z } : asWorld(lm);
 
-  const LSh = pt(map.get(L_SH)!);
-  const RSh = pt(map.get(R_SH)!);
-  const LEl = pt(map.get(L_EL)!);
-  const REl = pt(map.get(R_EL)!);
-  const LWr = pt(map.get(L_WR)!);
-  const RWr = pt(map.get(R_WR)!);
   const LHip = pt(map.get(L_HIP)!);
   const RHip = pt(map.get(R_HIP)!);
   const LKn = pt(map.get(L_KN)!);
@@ -355,13 +354,31 @@ function computeAngleMatrix(
   const LAnk = pt(map.get(L_ANK)!);
   const RAnk = pt(map.get(R_ANK)!);
 
+  const LShLm = map.get(L_SH);
+  const RShLm = map.get(R_SH);
+  const LElLm = map.get(L_EL);
+  const RElLm = map.get(R_EL);
+  const LWrLm = map.get(L_WR);
+  const RWrLm = map.get(R_WR);
+
+  const LSh = visibleEnough(LShLm) ? pt(LShLm!) : null;
+  const RSh = visibleEnough(RShLm) ? pt(RShLm!) : null;
+  const LEl = visibleEnough(LElLm) ? pt(LElLm!) : null;
+  const REl = visibleEnough(RElLm) ? pt(RElLm!) : null;
+  const LWr = visibleEnough(LWrLm) ? pt(LWrLm!) : null;
+  const RWr = visibleEnough(RWrLm) ? pt(RWrLm!) : null;
+
   return {
-    leftElbow: jointAngleDeg(LSh, LEl, LWr),
-    rightElbow: jointAngleDeg(RSh, REl, RWr),
-    leftShoulder: jointAngleDeg(LHip, LSh, LEl),
-    rightShoulder: jointAngleDeg(RHip, RSh, REl),
-    leftHip: jointAngleDeg(LSh, LHip, LKn),
-    rightHip: jointAngleDeg(RSh, RHip, RKn),
+    leftElbow:
+      LSh && LEl && LWr ? jointAngleDeg(LSh, LEl, LWr) : 160,
+    rightElbow:
+      RSh && REl && RWr ? jointAngleDeg(RSh, REl, RWr) : 160,
+    leftShoulder:
+      LHip && LSh && LEl ? jointAngleDeg(LHip, LSh, LEl) : 40,
+    rightShoulder:
+      RHip && RSh && REl ? jointAngleDeg(RHip, RSh, REl) : 40,
+    leftHip: LSh ? jointAngleDeg(LSh, LHip, LKn) : 170,
+    rightHip: RSh ? jointAngleDeg(RSh, RHip, RKn) : 170,
     leftKnee: jointAngleDeg(LHip, LKn, LAnk),
     rightKnee: jointAngleDeg(RHip, RKn, RAnk),
   };
