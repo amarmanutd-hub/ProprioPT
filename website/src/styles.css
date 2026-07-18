@@ -46,6 +46,13 @@ a {
   text-decoration: none;
 }
 
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--sea);
+  outline-offset: 3px;
+}
+
 .skip {
   position: absolute;
   left: -999px;
