@@ -310,8 +310,14 @@ export class PerceptionEngine {
       this.video.muted = true;
       await this.video.play();
     } catch (err) {
-      const msg =
+      const raw =
         err instanceof Error ? err.message : "Camera permission denied";
+      const msg =
+        err instanceof DOMException && err.name === "NotSupportedError"
+          ? "Camera isn’t available here. Use Chrome or Safari on a device with a webcam."
+          : raw === "Not supported"
+            ? "Camera isn’t available here. Use Chrome or Safari on a device with a webcam."
+            : raw;
       this.alerts.onHalt?.("camera", msg);
       throw err;
     }

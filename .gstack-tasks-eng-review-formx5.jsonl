@@ -1,0 +1,7 @@
+{"phase":"eng-review","id":"T1","priority":"P1","title":"Fix incompleteFlex semantics","source_finding":"CQ1"}
+{"phase":"eng-review","id":"T2","priority":"P1","title":"Latch-only form event counts","source_finding":"A2"}
+{"phase":"eng-review","id":"T3","priority":"P2","title":"Gate audio to matching WAVs","source_finding":"CQ2"}
+{"phase":"eng-review","id":"T4","priority":"P1","title":"Bridge polarity + step-up standing_front","source_finding":"A1"}
+{"phase":"eng-review","id":"T5","priority":"P2","title":"Standing side limb wiring","source_finding":"CQ3"}
+{"phase":"eng-review","id":"T6","priority":"P1","title":"Multi-set + rest phase","source_finding":"A3"}
+{"phase":"eng-review","id":"T7","priority":"P1","title":"Full sim suite","source_finding":"T1"}
