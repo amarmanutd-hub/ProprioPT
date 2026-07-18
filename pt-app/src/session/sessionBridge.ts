@@ -9,9 +9,17 @@ import type { ClinicalSessionPayload } from "../export/ClinicalSessionExport";
 const CARE_PLAN_KEY = "proprio.carePlan";
 const ASSIGNMENT_KEY = "proprio.assignmentId";
 
+export type ClinicalLimits = {
+  side: "left" | "right" | "bilateral";
+  maxKneeFlexionDeg: number;
+  maxExtensionDeficitDeg: number;
+  painStopAt: number;
+};
+
 export type EmbeddedCarePlan = {
   notes?: string;
   patient_display_name?: string;
+  limits?: ClinicalLimits;
   exercises: Array<{
     name: string;
     sets?: number;
@@ -19,6 +27,32 @@ export type EmbeddedCarePlan = {
     cues?: string;
   }>;
 };
+
+export const DEFAULT_LIMITS: ClinicalLimits = {
+  side: "right",
+  maxKneeFlexionDeg: 90,
+  maxExtensionDeficitDeg: 0,
+  painStopAt: 5,
+};
+
+export function limitsFromCarePlan(
+  plan: EmbeddedCarePlan | null,
+): ClinicalLimits {
+  const L = plan?.limits;
+  if (!L) return { ...DEFAULT_LIMITS };
+  return {
+    side: L.side ?? DEFAULT_LIMITS.side,
+    maxKneeFlexionDeg: Number.isFinite(L.maxKneeFlexionDeg)
+      ? L.maxKneeFlexionDeg
+      : DEFAULT_LIMITS.maxKneeFlexionDeg,
+    maxExtensionDeficitDeg: Number.isFinite(L.maxExtensionDeficitDeg)
+      ? L.maxExtensionDeficitDeg
+      : DEFAULT_LIMITS.maxExtensionDeficitDeg,
+    painStopAt: Number.isFinite(L.painStopAt)
+      ? L.painStopAt
+      : DEFAULT_LIMITS.painStopAt,
+  };
+}
 
 let client: SupabaseClient | null = null;
 
@@ -78,6 +112,7 @@ export async function persistExerciseSession(
         assignmentId,
         carePlanPatientName: carePlan?.patient_display_name ?? null,
         carePlanNotes: carePlan?.notes ?? null,
+        carePlanLimits: carePlan?.limits ?? null,
       },
     })
     .select("id")

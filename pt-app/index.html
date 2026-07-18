@@ -593,6 +593,39 @@
         white-space: nowrap;
       }
       .pack-chip-mode[data-kind="count"] { color: var(--amber); }
+      .limits-chip {
+        display: none;
+        margin: 0.35rem 0 0;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--sea-deep, #1a4f59);
+      }
+      body.pack-mode .limits-chip:not([hidden]) { display: block; }
+      .pain-stop {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        background: rgba(12, 20, 24, 0.55);
+        padding: 1.25rem;
+      }
+      .pain-stop[hidden] { display: none !important; }
+      .pain-stop-card {
+        max-width: 22rem;
+        width: 100%;
+        background: var(--paper, #f2f6f7);
+        color: var(--ink, #0c1418);
+        border-radius: 14px;
+        padding: 1.25rem;
+      }
+      .pain-stop-card h2 {
+        margin: 0 0 0.5rem;
+        font-family: var(--font-display, Georgia, serif);
+        font-size: 1.35rem;
+      }
+      .pain-stop-card p { margin: 0 0 1rem; line-height: 1.45; }
+      .pain-stop-actions { display: flex; flex-direction: column; gap: 0.45rem; }
       @keyframes pack-chip-in {
         from { opacity: 0; transform: translateY(4px); }
         to { opacity: 1; transform: translateY(0); }
@@ -863,6 +896,7 @@
               <span class="pack-chip-label" id="pack-chip-label">Knee home pack</span>
               <span class="pack-chip-mode" id="pack-chip-mode" data-kind="form">Form coached</span>
             </p>
+            <p id="limits-chip" class="limits-chip" hidden></p>
             <p id="status" data-kind="ok">Press Start when you have space to move.</p>
             <div id="calib-bar" aria-hidden="true"><span></span></div>
             <div class="actions">
@@ -870,9 +904,23 @@
               <button type="button" class="primary" id="pack-confirm" hidden disabled>I’m ready — begin</button>
               <button type="button" class="ghost" id="pack-skip" hidden disabled>Skip this one</button>
               <button type="button" class="primary" id="end-session" disabled>See results</button>
+              <button type="button" class="ghost" id="pain-check" hidden>Pain check</button>
               <button type="button" class="ghost" id="audio-toggle" aria-pressed="false">Mute</button>
               <button type="button" class="ghost" id="stop" disabled>Stop</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pain-stop" class="pain-stop" hidden role="dialog" aria-labelledby="pain-stop-title">
+        <div class="pain-stop-card">
+          <h2 id="pain-stop-title">Pain check</h2>
+          <p>
+            Your PT set a stop threshold. Continue only if you feel safe — this is not medical advice.
+          </p>
+          <div class="pain-stop-actions">
+            <button type="button" class="primary" id="pain-stop-continue">I’m OK — continue</button>
+            <button type="button" class="ghost" id="pain-stop-end">End session</button>
           </div>
         </div>
       </div>

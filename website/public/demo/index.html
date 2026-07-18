@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Proprio — Squat session</title>
+    <title>Proprio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -126,24 +126,19 @@
         color: var(--paper);
       }
       .back-site {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        margin: 0 0 0.65rem;
-        padding: 0.35rem 0.7rem;
-        border-radius: 999px;
-        border: 1px solid rgba(247, 250, 251, 0.18);
-        background: rgba(247, 250, 251, 0.08);
-        color: rgba(247, 250, 251, 0.88);
+        display: inline-block;
+        margin: 0 0 0.55rem;
+        color: rgba(247, 250, 251, 0.72);
         font-family: var(--font-ui);
-        font-size: 0.82rem;
+        font-size: 0.8rem;
         font-weight: 600;
         text-decoration: none;
-        width: fit-content;
+        border-bottom: 1px solid transparent;
+        transition: color 0.2s ease, border-color 0.2s ease;
       }
       .back-site:hover {
-        background: rgba(247, 250, 251, 0.14);
         color: var(--paper);
+        border-bottom-color: rgba(247, 250, 251, 0.45);
       }
       .brand h1 {
         margin: 0;
@@ -257,12 +252,12 @@
       }
 
       .sheet {
-        background: var(--glass);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.55);
-        border-radius: 14px;
-        padding: 0.75rem 0.85rem 0.8rem;
-        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+        background: linear-gradient(165deg, rgba(247, 250, 251, 0.94), rgba(232, 238, 241, 0.9));
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-radius: 12px;
+        padding: 0.8rem 0.9rem 0.85rem;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18);
       }
 
       .steps {
@@ -278,6 +273,27 @@
       }
       .steps span.on { background: var(--sea); }
       .steps span.done { background: var(--moss); }
+
+      body.pack-mode .steps { display: none; }
+
+      .pack-progress {
+        display: none;
+        gap: 0.28rem;
+        margin-bottom: 0.55rem;
+      }
+      body.pack-mode .pack-progress { display: flex; }
+      .pack-progress span {
+        flex: 1;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(28, 42, 50, 0.12);
+        transition: background 0.35s cubic-bezier(0.22, 1, 0.36, 1), transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .pack-progress span.done { background: var(--moss); }
+      .pack-progress span.on {
+        background: var(--sea);
+        transform: scaleY(1.35);
+      }
 
       #status {
         margin: 0 0 0.65rem;
@@ -321,10 +337,15 @@
         min-height: 44px;
         width: 100%;
         padding: 0.6rem 1rem;
-        border-radius: 999px;
+        border-radius: 10px;
         border: 1.5px solid transparent;
         cursor: pointer;
         white-space: nowrap;
+        transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+      }
+      button.primary:active:not(:disabled),
+      button.ghost:active:not(:disabled) {
+        transform: scale(0.985);
       }
       /* Only show the live next step — hide disabled clutter */
       .actions > button:disabled {
@@ -540,7 +561,7 @@
         width: 100%;
         min-height: 46px;
         border: none;
-        border-radius: 999px;
+        border-radius: 10px;
         background: var(--sea);
         color: #fff;
         font-family: var(--font-ui);
@@ -551,6 +572,178 @@
       .results-card .done-btn:hover {
         background: var(--sea-deep);
       }
+
+      .pack-chip {
+        display: none;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin: 0 0 0.45rem;
+        padding: 0;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--mute);
+        animation: pack-chip-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      body.pack-mode .pack-chip:not([hidden]) { display: flex; }
+      .pack-chip-label { color: var(--ink); font-weight: 700; }
+      .pack-chip-mode {
+        color: var(--sea-deep);
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .pack-chip-mode[data-kind="count"] { color: var(--amber); }
+      .limits-chip {
+        display: none;
+        margin: 0.35rem 0 0;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--sea-deep, #1a4f59);
+      }
+      body.pack-mode .limits-chip:not([hidden]) { display: block; }
+      .pain-stop {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        background: rgba(12, 20, 24, 0.55);
+        padding: 1.25rem;
+      }
+      .pain-stop[hidden] { display: none !important; }
+      .pain-stop-card {
+        max-width: 22rem;
+        width: 100%;
+        background: var(--paper, #f2f6f7);
+        color: var(--ink, #0c1418);
+        border-radius: 14px;
+        padding: 1.25rem;
+      }
+      .pain-stop-card h2 {
+        margin: 0 0 0.5rem;
+        font-family: var(--font-display, Georgia, serif);
+        font-size: 1.35rem;
+      }
+      .pain-stop-card p { margin: 0 0 1rem; line-height: 1.45; }
+      .pain-stop-actions { display: flex; flex-direction: column; gap: 0.45rem; }
+      @keyframes pack-chip-in {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      #pack-results {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: none;
+        place-items: center;
+        padding: 1.25rem;
+        background: rgba(12, 20, 24, 0.82);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        pointer-events: auto;
+      }
+      #pack-results[hidden] { display: none !important; }
+      #pack-results.is-open {
+        display: grid !important;
+      }
+      #pack-results.is-open .results-card {
+        animation: pack-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes pack-card-in {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .pack-results-kicker {
+        margin: 0 0 0.35rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--sea-deep);
+      }
+      .pack-results-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-top: 0.25rem;
+      }
+      .pack-results-actions .text-btn {
+        width: 100%;
+        min-height: 40px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--mute);
+        font-family: var(--font-ui);
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .pack-results-actions .text-btn:hover { color: var(--ink); }
+      .pack-results-actions .ghost-done {
+        width: 100%;
+        min-height: 44px;
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        background: transparent;
+        color: var(--ink);
+        font-family: var(--font-ui);
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .pack-results-actions .ghost-done:hover {
+        border-color: var(--ink);
+        background: rgba(28, 42, 50, 0.04);
+      }
+      .pack-rows {
+        list-style: none;
+        margin: 0.25rem 0 1.1rem;
+        padding: 0;
+        text-align: left;
+        max-height: min(42vh, 18rem);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .pack-rows li {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.15rem 0.75rem;
+        align-items: baseline;
+        padding: 0.7rem 0;
+        border-top: 1px solid var(--line);
+        font-size: 0.92rem;
+      }
+      .pack-rows li:first-child { border-top: none; }
+      .pack-rows strong {
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .pack-rows .reps {
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--sea-deep);
+      }
+      .pack-rows .mode {
+        grid-column: 1 / -1;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--mute);
+      }
+      .pack-rows .notes {
+        grid-column: 1 / -1;
+        margin: 0.15rem 0 0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        line-height: 1.35;
+        color: var(--ink);
+      }
+      .pack-rows li[data-status="skipped"] strong,
+      .pack-rows li[data-status="pending"] strong { color: var(--mute); }
+      .pack-rows li[data-status="skipped"] .reps,
+      .pack-rows li[data-status="pending"] .reps { color: var(--mute); }
 
       /* Hidden anchors kept for JS */
       #lock, #fps, #joints, #rscale, #anchor { }
@@ -594,7 +787,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/demo/assets/index-7Ez0MNFq.js"></script>
+    <script type="module" crossorigin src="/demo/assets/index-CbwIpY47.js"></script>
   </head>
   <body>
     <div class="stage">
@@ -649,12 +842,26 @@
         </div>
       </div>
 
+      <div id="pack-results" hidden>
+        <div class="results-card" role="dialog" aria-labelledby="pack-results-title">
+          <p class="pack-results-kicker">Knee home pack</p>
+          <h2 id="pack-results-title">You’re done for today</h2>
+          <p class="results-sub">Stayed on this device. Scroll the summary below — save a copy only if you want to share with your PT.</p>
+          <ul class="pack-rows" id="pack-results-list" aria-label="Exercises"></ul>
+          <div class="pack-results-actions">
+            <button type="button" class="done-btn" id="pack-results-done">Done</button>
+            <button type="button" class="text-btn" id="pack-download-html">Save HTML for your PT</button>
+            <button type="button" class="text-btn" id="pack-download-json">Save JSON</button>
+          </div>
+        </div>
+      </div>
+
       <div class="shell">
         <header class="top">
           <div class="brand">
             <a class="back-site" id="back-site" href="/">← Website</a>
             <h1>Proprio</h1>
-            <p>Your squat session — guided on this device only.</p>
+            <p id="brand-sub">Your squat session — guided on this device only.</p>
           </div>
           <div class="trust">
             <strong>Stays on your device</strong>
@@ -679,14 +886,42 @@
               <span id="step-2"></span>
               <span id="step-3"></span>
             </div>
+            <div class="pack-progress" id="pack-progress" hidden aria-label="Pack progress">
+              <span class="on"></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p id="pack-mode-badge" class="pack-chip" hidden>
+              <span class="pack-chip-label" id="pack-chip-label">Knee home pack</span>
+              <span class="pack-chip-mode" id="pack-chip-mode" data-kind="form">Form coached</span>
+            </p>
+            <p id="limits-chip" class="limits-chip" hidden></p>
             <p id="status" data-kind="ok">Press Start when you have space to move.</p>
             <div id="calib-bar" aria-hidden="true"><span></span></div>
             <div class="actions">
               <button type="button" class="primary" id="start">Start camera</button>
+              <button type="button" class="primary" id="pack-confirm" hidden disabled>I’m ready — begin</button>
+              <button type="button" class="ghost" id="pack-skip" hidden disabled>Skip this one</button>
               <button type="button" class="primary" id="end-session" disabled>See results</button>
+              <button type="button" class="ghost" id="pain-check" hidden>Pain check</button>
               <button type="button" class="ghost" id="audio-toggle" aria-pressed="false">Mute</button>
               <button type="button" class="ghost" id="stop" disabled>Stop</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pain-stop" class="pain-stop" hidden role="dialog" aria-labelledby="pain-stop-title">
+        <div class="pain-stop-card">
+          <h2 id="pain-stop-title">Pain check</h2>
+          <p>
+            Your PT set a stop threshold. Continue only if you feel safe — this is not medical advice.
+          </p>
+          <div class="pain-stop-actions">
+            <button type="button" class="primary" id="pain-stop-continue">I’m OK — continue</button>
+            <button type="button" class="ghost" id="pain-stop-end">End session</button>
           </div>
         </div>
       </div>

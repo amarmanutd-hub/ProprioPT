@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { signOut } from "../auth/authService";
 import { useAuth } from "../auth/AuthProvider";
-import type { CarePlan, PatientAssignment } from "../lib/database.types";
+import type { CarePlan, ClinicalLimits, PatientAssignment } from "../lib/database.types";
 import {
   createPatientAssignment,
   listAssignmentsForPt,
@@ -13,6 +13,14 @@ type DraftExercise = {
   reps: string;
   cues: string;
 };
+
+const KNEE_PRESETS: DraftExercise[] = [
+  { name: "Squats", sets: "2", reps: "10", cues: "Mini-squat OK — form coached" },
+  { name: "Heel slides", sets: "2", reps: "10", cues: "Form coached" },
+  { name: "Step-ups", sets: "2", reps: "8", cues: "Form coached" },
+  { name: "Straight leg raise", sets: "2", reps: "10", cues: "Form coached" },
+  { name: "Glute bridge", sets: "2", reps: "10", cues: "Form coached · hold at top" },
+];
 
 const emptyExercise = (): DraftExercise => ({
   name: "",
@@ -26,7 +34,11 @@ export function TherapistDashboard() {
   const [assignments, setAssignments] = useState<PatientAssignment[]>([]);
   const [patientName, setPatientName] = useState("");
   const [notes, setNotes] = useState("");
-  const [exercises, setExercises] = useState<DraftExercise[]>([emptyExercise()]);
+  const [side, setSide] = useState<ClinicalLimits["side"]>("right");
+  const [maxFlexion, setMaxFlexion] = useState("90");
+  const [maxExtDeficit, setMaxExtDeficit] = useState("0");
+  const [painStop, setPainStop] = useState("5");
+  const [exercises, setExercises] = useState<DraftExercise[]>([...KNEE_PRESETS]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastInvite, setLastInvite] = useState<{ code: string; url: string } | null>(null);
@@ -45,6 +57,13 @@ export function TherapistDashboard() {
     setExercises((prev) => prev.map((ex, i) => (i === index ? { ...ex, ...patch } : ex)));
   }
 
+  function addPreset(preset: DraftExercise) {
+    setExercises((prev) => {
+      if (prev.some((e) => e.name === preset.name)) return prev;
+      return [...prev, { ...preset }];
+    });
+  }
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     if (!profile) return;
@@ -52,8 +71,16 @@ export function TherapistDashboard() {
     setError(null);
     setLastInvite(null);
 
+    const limits: ClinicalLimits = {
+      side,
+      maxKneeFlexionDeg: Number(maxFlexion) || 90,
+      maxExtensionDeficitDeg: Number(maxExtDeficit) || 0,
+      painStopAt: Number(painStop) || 5,
+    };
+
     const carePlan: CarePlan = {
       notes: notes.trim() || undefined,
+      limits,
       exercises: exercises.map((ex) => ({
         name: ex.name,
         sets: Number(ex.sets) || undefined,
@@ -71,7 +98,7 @@ export function TherapistDashboard() {
       setLastInvite({ code: result.accessCode, url: result.inviteUrl });
       setPatientName("");
       setNotes("");
-      setExercises([emptyExercise()]);
+      setExercises([...KNEE_PRESETS]);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create assignment");
@@ -100,7 +127,7 @@ export function TherapistDashboard() {
           <h2>New patient invite</h2>
           <p className="muted">
             Creates an unclaimed assignment and a one-time <span className="mono">PROP-XXXX</span>{" "}
-            access code.
+            access code. Patient starts the knee pack with these limits.
           </p>
 
           {error ? <p className="banner error">{error}</p> : null}
@@ -127,13 +154,54 @@ export function TherapistDashboard() {
               />
             </label>
 
+            <fieldset className="limits-box">
+              <legend>Clinical limits</legend>
+              <p className="muted small">Shown first on the patient plan and enforced in the pack.</p>
+              <div className="row">
+                <label className="field">
+                  <span>Side</span>
+                  <select value={side} onChange={(e) => setSide(e.target.value as ClinicalLimits["side"])}>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                    <option value="bilateral">Bilateral</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Max knee flexion (°)</span>
+                  <input
+                    value={maxFlexion}
+                    onChange={(e) => setMaxFlexion(e.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+              </div>
+              <div className="row">
+                <label className="field">
+                  <span>Max extension deficit (°)</span>
+                  <input
+                    value={maxExtDeficit}
+                    onChange={(e) => setMaxExtDeficit(e.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label className="field">
+                  <span>Stop if pain ≥</span>
+                  <input
+                    value={painStop}
+                    onChange={(e) => setPainStop(e.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+              </div>
+            </fieldset>
+
             <label className="field">
               <span>Care plan notes</span>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
-                placeholder="Focus on controlled tempo; stop if pain &gt; 3/10."
+                placeholder="Focus on controlled tempo; stop if swelling."
               />
             </label>
 
@@ -147,6 +215,18 @@ export function TherapistDashboard() {
                 >
                   Add exercise
                 </button>
+              </div>
+              <div className="preset-row">
+                {KNEE_PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    className="chip"
+                    onClick={() => addPreset(p)}
+                  >
+                    + {p.name}
+                  </button>
+                ))}
               </div>
 
               {exercises.map((ex, index) => (
@@ -203,7 +283,7 @@ export function TherapistDashboard() {
           ) : (
             <ul className="assignment-list">
               {assignments.map((row) => {
-                const plan = row.care_plan as (CarePlan & { patient_display_name?: string }) | null;
+                const plan = row.care_plan as CarePlan | null;
                 const label = plan?.patient_display_name ?? "Patient";
                 return (
                   <li key={row.id}>
@@ -215,6 +295,9 @@ export function TherapistDashboard() {
                     </div>
                     <p className="mono muted">
                       {row.access_code ?? "code redeemed"} · {plan?.exercises.length ?? 0} exercises
+                      {plan?.limits
+                        ? ` · max flex ${plan.limits.maxKneeFlexionDeg}°`
+                        : ""}
                     </p>
                   </li>
                 );

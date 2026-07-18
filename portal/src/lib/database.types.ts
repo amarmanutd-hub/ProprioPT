@@ -7,9 +7,17 @@ export type Profile = {
   created_at: string;
 };
 
+export type ClinicalLimits = {
+  side: "left" | "right" | "bilateral";
+  maxKneeFlexionDeg: number;
+  maxExtensionDeficitDeg: number;
+  painStopAt: number;
+};
+
 export type CarePlan = {
   notes?: string;
   patient_display_name?: string;
+  limits?: ClinicalLimits;
   exercises: Array<{
     name: string;
     sets?: number;

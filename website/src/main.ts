@@ -9,6 +9,7 @@ const DEMO_BASE =
   (import.meta.env.DEV ? "http://localhost:5174/" : "/demo/");
 
 const PACK_URL = (() => {
+  if (!import.meta.env.DEV) return "/pack/knee-v1";
   try {
     const u = new URL(DEMO_BASE, location.origin);
     u.searchParams.set("pack", "knee-v1");

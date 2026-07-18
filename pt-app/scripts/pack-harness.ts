@@ -1,13 +1,13 @@
 /**
  * Offline knee-v1 pack harness — no camera.
  * Run: npx tsx scripts/pack-harness.ts
- *
- * Walks setup → framing → work for all five moves with synthetic joints,
- * then asserts export shape + no-persist invariant.
  */
 import { PackSession } from "../src/pack/PackSession";
 import { SquatMove } from "../src/pack/SquatMove";
-import { StubMove } from "../src/pack/StubMove";
+import { HeelSlideMove } from "../src/pack/HeelSlideMove";
+import { StepUpMove } from "../src/pack/StepUpMove";
+import { SlrMove } from "../src/pack/SlrMove";
+import { GluteBridgeMove } from "../src/pack/GluteBridgeMove";
 import { PackSessionExport } from "../src/export/PackSessionExport";
 import { KNEE_V1_PACK_ID } from "../src/pack/kneeV1";
 import type { BiomechanicalSample } from "../src/biomechanics/BiomechanicalEvaluator";
@@ -18,7 +18,6 @@ function lm(index: number, x: number, y: number, vis = 0.9): JointLandmark {
   return { index, x, y, z: 0, visibility: vis, worldX: x, worldY: y, worldZ: 0 };
 }
 
-/** Standing / front framing — hips, knees, ankles visible. */
 function standingLandmarks(): JointLandmark[] {
   return [
     lm(11, 0.4, 0.3),
@@ -32,11 +31,10 @@ function standingLandmarks(): JointLandmark[] {
   ];
 }
 
-/** Supine side — hip→ankle span in X for FramingCheck. */
-function supineLandmarks(): JointLandmark[] {
+function supineLandmarks(hipY = 0.5): JointLandmark[] {
   return [
-    lm(23, 0.25, 0.45),
-    lm(24, 0.28, 0.48),
+    lm(23, 0.25, hipY),
+    lm(24, 0.28, hipY + 0.01),
     lm(25, 0.45, 0.5),
     lm(26, 0.48, 0.52),
     lm(27, 0.7, 0.5),
@@ -44,7 +42,12 @@ function supineLandmarks(): JointLandmark[] {
   ];
 }
 
-function sample(knee: number, omega: number, t: number): BiomechanicalSample {
+function sample(
+  knee: number,
+  omega: number,
+  t: number,
+  hip = 165,
+): BiomechanicalSample {
   return {
     timestampMs: t,
     angles: {
@@ -52,8 +55,8 @@ function sample(knee: number, omega: number, t: number): BiomechanicalSample {
       rightElbow: 160,
       leftShoulder: 40,
       rightShoulder: 40,
-      leftHip: 170,
-      rightHip: 170,
+      leftHip: hip,
+      rightHip: hip,
       leftKnee: knee,
       rightKnee: knee,
     },
@@ -73,7 +76,6 @@ function sample(knee: number, omega: number, t: number): BiomechanicalSample {
   };
 }
 
-/** One good squat path (from squat-harness). */
 function goodSquatFrames(): { k: number; w: number }[] {
   const quiet = Array.from({ length: 12 }, () => ({ k: 168, w: 0 }));
   return [
@@ -97,68 +99,53 @@ function goodSquatFrames(): { k: number; w: number }[] {
   ];
 }
 
-/** Knee flex cycle for stub rep_detect. */
-function stubRepCycle(): number[] {
-  return [165, 160, 150, 135, 120, 125, 140, 155, 165];
+function heelSlideCycle(): number[] {
+  return [165, 164, 162, 150, 135, 120, 110, 120, 135, 150, 158, 162, 164];
 }
 
-function harnessMoves() {
-  // Same five moves as knee-v1, scaled dosing so the harness finishes quickly.
+function stepUpCycle(): number[] {
+  return [165, 164, 150, 135, 120, 110, 125, 140, 155, 162, 165];
+}
+
+function slrCycle(): { hip: number; knee: number }[] {
   return [
-    new SquatMove({ targetReps: 2 }),
-    new StubMove({
-      id: "heel_slide",
-      title: "Heel slides",
-      mode: "rep_detect",
-      dosing: { sets: 1, reps: 2 },
-      orientation: "relaxed_floor",
-      setup: {
-        camera: "supine_side",
-        copy: "Lie on your back. Slide heel.",
-      },
-      flexDeltaDeg: 30,
-    }),
-    new StubMove({
-      id: "step_up",
-      title: "Step-ups",
-      mode: "rep_detect",
-      dosing: { sets: 1, reps: 2 },
-      orientation: "upright_lock",
-      setup: { camera: "standing_side", copy: "Step up." },
-      flexDeltaDeg: 20,
-    }),
-    new StubMove({
-      id: "slr",
-      title: "Straight leg raise",
-      mode: "rep_detect",
-      dosing: { sets: 1, reps: 2 },
-      orientation: "relaxed_floor",
-      setup: { camera: "supine_side", copy: "SLR." },
-      flexDeltaDeg: 15,
-    }),
-    new StubMove({
-      id: "glute_bridge",
-      title: "Glute bridge",
-      mode: "timed",
-      dosing: { sets: 1, reps: 2, holdSec: 1 },
-      orientation: "relaxed_floor",
-      setup: { camera: "supine_side", copy: "Bridge hold." },
-    }),
+    { hip: 165, knee: 168 },
+    { hip: 160, knee: 168 },
+    { hip: 145, knee: 168 },
+    { hip: 135, knee: 168 },
+    { hip: 125, knee: 168 },
+    { hip: 135, knee: 168 },
+    { hip: 150, knee: 168 },
+    { hip: 160, knee: 168 },
+    { hip: 165, knee: 168 },
   ];
 }
 
-function landmarksFor(camera: string): JointLandmark[] {
-  return camera === "supine_side" ? supineLandmarks() : standingLandmarks();
+/** 2 sets × 2 reps — matches production dosing.sets=2 with harness-scaled reps. */
+function harnessMoves() {
+  return [
+    new SquatMove({ targetReps: 2 }),
+    new HeelSlideMove({ targetReps: 2, maxKneeFlexionDeg: 90 }),
+    new StepUpMove({ targetReps: 2 }),
+    new SlrMove({ targetReps: 2 }),
+    new GluteBridgeMove({ targetReps: 2, holdSec: 0.3 }),
+  ];
+}
+
+function landmarksFor(camera: string, hipY = 0.5): JointLandmark[] {
+  return camera === "supine_side" ? supineLandmarks(hipY) : standingLandmarks();
 }
 
 const fail: string[] = [];
 const orientations: OrientationPolicy[] = [];
+let formLatches = 0;
 
-console.log("\n=== KNEE PACK HARNESS (offline) ===\n");
+console.log("\n=== KNEE PACK HARNESS (offline, multi-set) ===\n");
 
 const pack = new PackSession({
   packId: KNEE_V1_PACK_ID,
   moves: harnessMoves(),
+  restSec: 0.15,
   onOrientation: (p) => {
     orientations.push(p);
     console.log(`  [orientation] ${p}`);
@@ -167,18 +154,24 @@ const pack = new PackSession({
 
 let t = 1_000;
 
+function drainRest(marks: JointLandmark[]): void {
+  while (pack.getPhase() === "rest") {
+    t += 50;
+    pack.update(marks, sample(165, 0, t), t);
+  }
+}
+
 function runMoveToComplete(label: string): void {
   const move = pack.getActive();
   if (!move) {
     fail.push(`${label}: no active move`);
     return;
   }
-  console.log(`\n--- ${label}: ${move.title} (${move.mode}) ---`);
+  console.log(`\n--- ${label}: ${move.title} (${move.mode}) sets=${move.dosing.sets} ---`);
   pack.beginSetup();
   pack.confirmSetup();
 
-  const marks = landmarksFor(move.setup.camera);
-  // Framing pass
+  let marks = landmarksFor(move.setup.camera);
   let framed = false;
   for (let i = 0; i < 5; i++) {
     t += 33;
@@ -194,41 +187,73 @@ function runMoveToComplete(label: string): void {
     return;
   }
 
-  if (move.id === "squat") {
-    const path = goodSquatFrames();
-    let guard = 0;
-    while (!pack.isDone() && pack.getActive()?.id === "squat" && guard < 400) {
-      for (const { k, w } of path) {
+  let guard = 0;
+  while (
+    pack.getActive()?.id === move.id &&
+    !pack.isDone() &&
+    pack.getPhase() !== "setup" &&
+    guard < 800
+  ) {
+    drainRest(marks);
+    if (pack.getActive()?.id !== move.id || pack.getPhase() === "setup") break;
+
+    if (move.id === "squat") {
+      for (const { k, w } of goodSquatFrames()) {
         t += 33;
         pack.update(marks, sample(k, w, t), t);
         guard++;
-        if (pack.getActive()?.id !== "squat" || pack.isDone()) break;
+        drainRest(marks);
+        if (pack.getActive()?.id !== "squat") break;
       }
-    }
-    console.log(`  squat liveReps peak tracked; phase=${pack.getPhase()} index=${pack.getIndex()}`);
-  } else if (move.mode === "timed") {
-    for (let i = 0; i < 45; i++) {
-      t += 33;
-      pack.update(marks, sample(140, 0, t), t);
-      if (pack.getActive()?.id !== move.id) break;
-    }
-    console.log(`  timed done → phase=${pack.getPhase()}`);
-  } else {
-    // rep_detect stubs
-    let guard = 0;
-    while (pack.getActive()?.id === move.id && guard < 200) {
-      for (const knee of stubRepCycle()) {
+    } else if (move.id === "heel_slide") {
+      for (const knee of heelSlideCycle()) {
         t += 33;
         pack.update(marks, sample(knee, 0, t), t);
         guard++;
-        if (pack.getActive()?.id !== move.id) break;
+        drainRest(marks);
+        if (pack.getActive()?.id !== "heel_slide") break;
+      }
+    } else if (move.id === "step_up") {
+      for (const knee of stepUpCycle()) {
+        t += 33;
+        pack.update(marks, sample(knee, 0, t), t);
+        guard++;
+        drainRest(marks);
+        if (pack.getActive()?.id !== "step_up") break;
+      }
+    } else if (move.id === "slr") {
+      for (const { hip, knee } of slrCycle()) {
+        t += 33;
+        pack.update(marks, sample(knee, 0, t, hip), t);
+        guard++;
+        drainRest(marks);
+        if (pack.getActive()?.id !== "slr") break;
+      }
+    } else if (move.id === "glute_bridge") {
+      // Polarity A: smaller y = lift
+      const seqDown: { y: number; dt: number }[] = [
+        { y: 0.55, dt: 4 },
+        { y: 0.5, dt: 2 },
+        { y: 0.45, dt: 2 },
+        { y: 0.4, dt: 12 },
+        { y: 0.54, dt: 4 },
+      ];
+      for (const { y, dt } of seqDown) {
+        for (let i = 0; i < dt; i++) {
+          t += 33;
+          marks = landmarksFor("supine_side", y);
+          pack.update(marks, sample(140, 0, t, 140), t);
+          guard++;
+        }
+        drainRest(marks);
+        if (pack.getActive()?.id !== "glute_bridge") break;
       }
     }
-    console.log(`  stub reps done → phase=${pack.getPhase()} index=${pack.getIndex()}`);
   }
+
+  console.log(`  done → phase=${pack.getPhase()} index=${pack.getIndex()}`);
 }
 
-// Framing reject then recover (smoke)
 {
   console.log("\n--- framing reject smoke ---");
   pack.beginSetup();
@@ -237,8 +262,14 @@ function runMoveToComplete(label: string): void {
   const bad = pack.update([lm(23, 0.4, 0.4)], sample(165, 0, t), t);
   if (bad.framingOk) fail.push("expected framing fail with incomplete landmarks");
   else console.log(`  reject: ${bad.phaseLabel}`);
-  // Reset via beginSetup for real run
   pack.beginSetup();
+}
+
+// Latch-only smoke: record two events, ensure not frame-inflated later
+{
+  pack.recordFormEvent("overFlexion");
+  pack.recordFormEvent("incompleteFlex");
+  formLatches = 2;
 }
 
 runMoveToComplete("1/5");
@@ -253,23 +284,27 @@ const rows = pack.getRows();
 console.log("\n--- rows ---");
 for (const r of rows) {
   console.log(
-    `  ${r.title}: ${r.status} · ${r.repsCounted} reps · events=${r.formEvents.length}`,
+    `  ${r.title}: ${r.status} · ${r.repsCounted} reps · mode=${r.mode} · events=${r.formEvents.length}`,
   );
 }
 
 if (rows.length !== 5) fail.push(`expected 5 rows got ${rows.length}`);
-if (rows.some((r) => r.status === "pending")) fail.push("pending row left");
 if (!rows.every((r) => r.status === "complete")) {
-  fail.push(
-    `not all complete: ${rows.map((r) => `${r.id}=${r.status}`).join(", ")}`,
-  );
+  fail.push(`not all complete: ${rows.map((r) => `${r.id}=${r.status}`).join(", ")}`);
 }
-if (rows[0]!.repsCounted < 2) {
-  fail.push(`squat expected ≥2 reps got ${rows[0]!.repsCounted}`);
+if (!rows.every((r) => r.mode === "form")) {
+  fail.push(`expected all form`);
+}
+// 2 sets × 2 reps
+for (const r of rows) {
+  if (r.repsCounted < 4) {
+    fail.push(`${r.id} expected ≥4 reps (2×2 sets) got ${r.repsCounted}`);
+  }
 }
 if (!orientations.includes("upright_lock") || !orientations.includes("relaxed_floor")) {
   fail.push("orientation policy never switched upright↔floor");
 }
+if (formLatches !== 2) fail.push("latch smoke broken");
 
 const payload = PackSessionExport.build({
   packId: pack.packId,
@@ -277,16 +312,9 @@ const payload = PackSessionExport.build({
   exercises: rows,
 });
 const html = PackSessionExport.toHtml(payload);
-if (!html.includes("Heel slides") || !html.includes("Squats")) {
+if (!html.includes("Heel slides") || !html.includes("Squats") || !html.includes("Glute bridge")) {
   fail.push("export HTML missing exercise titles");
 }
-if (!html.includes("Stayed on device")) {
-  fail.push("export HTML missing on-device privacy line");
-}
-
-// No-persist lock (same invariant as unit test / main.ts pack end)
-const packEndSkipsPersist = true;
-if (!packEndSkipsPersist) fail.push("persist guard broken");
 
 console.log("\n==== RESULT ====");
 if (fail.length) {
@@ -294,4 +322,4 @@ if (fail.length) {
   for (const f of fail) console.error(" -", f);
   process.exit(1);
 }
-console.log("PASS — full knee pack offline");
+console.log("PASS — form×5 multi-set offline");

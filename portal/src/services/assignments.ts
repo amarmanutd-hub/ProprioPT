@@ -37,6 +37,7 @@ export async function createPatientAssignment(
   const carePlan: CarePlan = {
     ...input.carePlan,
     notes: input.carePlan.notes?.trim() || undefined,
+    limits: input.carePlan.limits,
     exercises: input.carePlan.exercises.map((ex) => ({
       ...ex,
       name: ex.name.trim(),

@@ -10,7 +10,11 @@ import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator
 
 export type SquatState = 0 | 1 | 2 | 3;
 
-export type CompensationKind = "valgus" | "trunk" | "incompleteDepth";
+export type CompensationKind =
+  | "valgus"
+  | "trunk"
+  | "incompleteDepth"
+  | "overFlexion";
 
 export interface CompensationEvent {
   kind: CompensationKind;
@@ -44,6 +48,8 @@ export interface SquatEvaluatorOptions {
   standDeg?: number; // State 0 enter / rep complete
   depthDeg?: number; // State 2 target
   ascentUnlockDeg?: number; // State 3 enter after depth
+  /** Clinical max flexion: knee angle must not go below this (180=straight). */
+  minKneeAngleDeg?: number;
   valgusKneeAnkleRatio?: number; // flag if kneeWidth < ratio * ankleWidth
   trunkLeanDeg?: number; // flag if torso tilt > this before depth
   onCompensation?: (e: CompensationEvent) => void;
@@ -71,6 +77,7 @@ export class SquatEvaluator {
   private readonly standDeg: number;
   private readonly depthDeg: number;
   private readonly ascentUnlockDeg: number;
+  private readonly minKneeAngleDeg: number | null;
   private readonly valgusRatio: number;
   private readonly trunkLeanDeg: number;
   private readonly onCompensation?: (e: CompensationEvent) => void;
@@ -86,6 +93,7 @@ export class SquatEvaluator {
   private repHadValgus = false;
   private repHadTrunk = false;
   private incompleteLogged = false;
+  private overFlexionLogged = false;
   private lastEvent: CompensationEvent | null = null;
   private lastRep: RepMetrics | null = null;
   private activeFlags = new Set<CompensationKind>();
@@ -106,6 +114,10 @@ export class SquatEvaluator {
     this.standDeg = options.standDeg ?? 150;
     this.depthDeg = options.depthDeg ?? 128;
     this.ascentUnlockDeg = options.ascentUnlockDeg ?? 135;
+    this.minKneeAngleDeg =
+      options.minKneeAngleDeg != null && Number.isFinite(options.minKneeAngleDeg)
+        ? options.minKneeAngleDeg
+        : null;
     this.valgusRatio = options.valgusKneeAnkleRatio ?? 0.88;
     this.trunkLeanDeg = options.trunkLeanDeg ?? 45;
     this.onCompensation = options.onCompensation;
@@ -210,8 +222,30 @@ export class SquatEvaluator {
     }
 
     // Relative depth: ~30° of flexion from this rep's standing baseline
-    const depthTarget = Math.min(this.depthDeg, this.standBaseline - 30);
+    // Clinical max flexion: don't require (or allow) going past minKneeAngle.
+    let depthTarget = Math.min(this.depthDeg, this.standBaseline - 30);
+    if (this.minKneeAngleDeg != null) {
+      depthTarget = Math.max(depthTarget, this.minKneeAngleDeg);
+    }
     const standTarget = Math.min(this.standDeg, this.standBaseline - 8);
+
+    if (
+      this.minKneeAngleDeg != null &&
+      (this.state === 1 || this.state === 2) &&
+      flexed < this.minKneeAngleDeg - 2
+    ) {
+      if (!this.overFlexionLogged) {
+        this.overFlexionLogged = true;
+        this.emit({
+          kind: "overFlexion",
+          timestampMs: sample.timestampMs,
+          detail: `Past your PT limit (${this.minKneeAngleDeg}°) — ease up.`,
+        });
+      }
+    } else if (this.minKneeAngleDeg != null && flexed >= this.minKneeAngleDeg) {
+      this.overFlexionLogged = false;
+      this.activeFlags.delete("overFlexion");
+    }
 
     const prev = this.state;
 
@@ -242,6 +276,7 @@ export class SquatEvaluator {
           this.repHadValgus = false;
           this.repHadTrunk = false;
           this.incompleteLogged = false;
+          this.overFlexionLogged = false;
           this.trunkLatched = false;
           this.valgusLatched = false;
           this.valgusStreak = 0;
@@ -347,6 +382,7 @@ export class SquatEvaluator {
 
   private emit(e: CompensationEvent): void {
     this.lastEvent = e;
+    this.activeFlags.add(e.kind);
     this.onCompensation?.(e);
   }
 

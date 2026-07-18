@@ -23,6 +23,7 @@ export interface ClinicalSessionPayload {
     valgus: number;
     trunk: number;
     incompleteDepth: number;
+    overFlexion: number;
     total: number;
   };
 }
@@ -35,6 +36,7 @@ export class ClinicalSessionExport {
     valgus: 0,
     trunk: 0,
     incompleteDepth: 0,
+    overFlexion: 0,
   };
 
   constructor(exerciseId = "bodyweight_squat") {
@@ -73,7 +75,8 @@ export class ClinicalSessionExport {
     const totalComp =
       this.compensations.valgus +
       this.compensations.trunk +
-      this.compensations.incompleteDepth;
+      this.compensations.incompleteDepth +
+      this.compensations.overFlexion;
 
     return {
       sessionId: this.sessionId,
@@ -89,6 +92,7 @@ export class ClinicalSessionExport {
         valgus: this.compensations.valgus,
         trunk: this.compensations.trunk,
         incompleteDepth: this.compensations.incompleteDepth,
+        overFlexion: this.compensations.overFlexion,
         total: totalComp,
       },
     };

@@ -13,5 +13,19 @@
 **Effort:** S
 **Priority:** P3
 **Depends on:** Working `/demo/?pack=knee-v1` pilot path
+**Status:** Implemented 2026-07-18 — rewrite + pathname pack detect + COOP/COEP on `/pack/`
 
 ## Completed
+
+- Product-complete path T1–T7 (limits types, portal UI, pack launch, flexion enforce, pain stop, `/pack/` URL, heel-slide form)
+- Form×5 hardening (2026-07-18): latch form events, multi-set+rest, bridge polarity, step-up front+valgus, heel incompleteFlex, standing side, audio gate, sims
+
+## Backlog
+
+### Dedicated form cue WAVs
+
+**What:** Record/add WAVs for bentKnee, incompleteLift, overFlexion, incompleteRise, incompleteFlex.
+**Why:** CQ2 leaves most pack flags banner+haptic only.
+**Effort:** M
+**Priority:** P3
+**Depends on:** Form×5 hardening shipped

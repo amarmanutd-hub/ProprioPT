@@ -35,13 +35,16 @@ type Invite = {
 
 const PRESETS: Exercise[] = [
   { name: "Squats", sets: 2, reps: 10, cues: "Mini-squat OK — form coached" },
-  { name: "Heel slides", sets: 2, reps: 10, cues: "Counting only" },
-  { name: "Step-ups", sets: 2, reps: 8, cues: "Counting only" },
-  { name: "Straight leg raise", sets: 2, reps: 10, cues: "Counting only" },
-  { name: "Glute bridge", sets: 2, reps: 10, cues: "Hold at top · counting only" },
+  { name: "Heel slides", sets: 2, reps: 10, cues: "Form coached" },
+  { name: "Step-ups", sets: 2, reps: 8, cues: "Form coached" },
+  { name: "Straight leg raise", sets: 2, reps: 10, cues: "Form coached" },
+  { name: "Glute bridge", sets: 2, reps: 10, cues: "Form coached · hold at top" },
 ];
 
 const PACK_URL = (() => {
+  if (!import.meta.env.DEV && !(import.meta.env.VITE_DEMO_URL as string | undefined)?.trim()) {
+    return "/pack/knee-v1";
+  }
   const env = (import.meta.env.VITE_DEMO_URL as string | undefined)?.trim();
   const base =
     env ||

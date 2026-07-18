@@ -81,6 +81,100 @@ describe("PackSession", () => {
     expect(pack.isDone()).toBe(true);
     expect(pack.getRows()[0].status).toBe("aborted");
   });
+
+  it("does not inflate form events from per-frame flags", () => {
+    const pack = new PackSession({
+      packId: "test",
+      moves: [
+        new StubMove({
+          id: "a",
+          title: "A",
+          mode: "rep_detect",
+          dosing: { sets: 1, reps: 5 },
+          orientation: "upright_lock",
+          setup: { camera: "standing_front", copy: "a" },
+        }),
+      ],
+    });
+    pack.confirmSetup();
+    // framing → work with good landmarks
+    const marks = legLandmarks();
+    pack.update(marks, null, 1000);
+    pack.recordFormEvent("overFlexion");
+    pack.recordFormEvent("overFlexion");
+    // live flags pushed every frame must not add counts
+    for (let i = 0; i < 30; i++) {
+      pack.update(marks, null, 1000 + i * 33);
+    }
+    pack.nextIncomplete();
+    const events = pack.getRows()[0].formEvents;
+    const over = events.find((e) => e.type === "overFlexion");
+    expect(over?.count).toBe(2);
+  });
+
+  it("runs rest between sets then completes", () => {
+    const moves = [
+      new StubMove({
+        id: "a",
+        title: "A",
+        mode: "rep_detect",
+        dosing: { sets: 2, reps: 1 },
+        orientation: "upright_lock",
+        setup: { camera: "standing_front", copy: "a" },
+        flexDeltaDeg: 20,
+      }),
+    ];
+    const pack = new PackSession({ packId: "test", moves, restSec: 0.2 });
+    pack.beginSetup();
+    pack.confirmSetup();
+    const marks = legLandmarks();
+    let t = 1000;
+    // enter work
+    pack.update(marks, null, t);
+    // One stub rep: flex then extend (need biomech sample)
+    const sample = (knee: number) =>
+      ({
+        timestampMs: t,
+        angles: {
+          leftElbow: 160,
+          rightElbow: 160,
+          leftShoulder: 40,
+          rightShoulder: 40,
+          leftHip: 170,
+          rightHip: 170,
+          leftKnee: knee,
+          rightKnee: knee,
+        },
+        angularVelocity: {
+          leftElbow: 0,
+          rightElbow: 0,
+          leftShoulder: 0,
+          rightShoulder: 0,
+          leftHip: 0,
+          rightHip: 0,
+          leftKnee: 0,
+          rightKnee: 0,
+        },
+        torsoLength: 0.5,
+        anchorDriftRatio: 0,
+        anchorCompensation: false,
+      }) as const;
+
+    for (const k of [165, 140, 120, 140, 165]) {
+      t += 33;
+      pack.update(marks, sample(k) as never, t);
+    }
+    expect(pack.getPhase()).toBe("rest");
+    t += 250;
+    pack.update(marks, sample(165) as never, t);
+    expect(pack.getPhase()).toBe("work");
+    for (const k of [165, 140, 120, 140, 165]) {
+      t += 33;
+      pack.update(marks, sample(k) as never, t);
+    }
+    expect(pack.isDone()).toBe(true);
+    expect(pack.getRows()[0].repsCounted).toBe(2);
+  });
 });
 
 describe("PackSessionExport", () => {

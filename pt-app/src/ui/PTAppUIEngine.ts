@@ -120,10 +120,12 @@ export class PTAppUIEngine {
     this.cues.speakRep(n);
   }
 
-  /** External compensation events. */
-  flashViolation(kind: CompensationKind, _detail: string): void {
-    this.showBanner(bannerFor(kind));
-    this.cues.speak(kind);
+  /** External compensation events. Banner always; audio only when a real WAV matches. */
+  flashViolation(kind: CompensationKind, detail: string): void {
+    this.showBanner(detail.trim() || bannerFor(kind));
+    if (kind === "valgus" || kind === "trunk" || kind === "incompleteDepth") {
+      this.cues.speak(kind);
+    }
     this.haptic();
   }
 
@@ -284,6 +286,8 @@ function bannerFor(kind: CompensationKind): string {
       return "Chest up";
     case "incompleteDepth":
       return "Go lower";
+    case "overFlexion":
+      return "Ease up — past your PT limit";
   }
 }
 

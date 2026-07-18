@@ -23,14 +23,18 @@ import {
   persistExerciseSession,
   readEmbeddedCarePlan,
   targetRepsFromCarePlan,
+  limitsFromCarePlan,
 } from "./session/sessionBridge";
 import { PackSession } from "./pack/PackSession";
 import { createKneeV1Moves, KNEE_V1_PACK_ID } from "./pack/kneeV1";
 import { SquatMove } from "./pack/SquatMove";
+import { HeelSlideMove } from "./pack/HeelSlideMove";
 import type { PackSessionPayload } from "./export/PackSessionExport";
+import type { CompensationKind } from "./squat/SquatEvaluator";
 
 const packMode =
-  new URLSearchParams(location.search).get("pack") === KNEE_V1_PACK_ID;
+  new URLSearchParams(location.search).get("pack") === KNEE_V1_PACK_ID ||
+  /\/pack\/knee-v1\/?$/.test(location.pathname);
 
 const video = document.querySelector<HTMLVideoElement>("#cam")!;
 const guide = document.querySelector<HTMLCanvasElement>("#guide")!;
@@ -141,6 +145,7 @@ function hidePackResults(): void {
 
 const carePlan = readEmbeddedCarePlan();
 const targetReps = targetRepsFromCarePlan(carePlan);
+const clinicalLimits = limitsFromCarePlan(carePlan);
 
 const backSite = document.querySelector<HTMLAnchorElement>("#back-site");
 if (backSite) {
@@ -158,6 +163,46 @@ if (carePlan?.notes) {
   setStatus(carePlan.notes, "ok");
 }
 
+const limitsChip = document.querySelector<HTMLParagraphElement>("#limits-chip");
+const painStopSheet = document.querySelector<HTMLDivElement>("#pain-stop");
+const painStopContinue = document.querySelector<HTMLButtonElement>("#pain-stop-continue");
+const painStopEnd = document.querySelector<HTMLButtonElement>("#pain-stop-end");
+
+function sideLabel(side: typeof clinicalLimits.side): string {
+  if (side === "left") return "Left";
+  if (side === "right") return "Right";
+  return "Both";
+}
+
+function showLimitsChip(): void {
+  if (!limitsChip || !packMode) return;
+  limitsChip.hidden = false;
+  limitsChip.textContent = `${sideLabel(clinicalLimits.side)} · max flex ${clinicalLimits.maxKneeFlexionDeg}° · stop if pain ≥ ${clinicalLimits.painStopAt}/10`;
+}
+
+function openPainStop(): void {
+  if (!painStopSheet) return;
+  painStopSheet.hidden = false;
+  setStatus(
+    `Paused — your PT asked you to stop if pain hits ${clinicalLimits.painStopAt}/10. Continue only if you feel safe.`,
+    "warn",
+  );
+}
+
+painStopContinue?.addEventListener("click", () => {
+  if (painStopSheet) painStopSheet.hidden = true;
+  setStatus("Continuing — ease into the next rep.", "ok");
+});
+
+painStopEnd?.addEventListener("click", () => {
+  if (painStopSheet) painStopSheet.hidden = true;
+  endSessionBtn.click();
+});
+
+document.querySelector("#pain-check")?.addEventListener("click", () => {
+  openPainStop();
+});
+
 if (packMode) {
   document.body.classList.add("pack-mode");
   document.title = "Proprio — Knee home pack";
@@ -166,11 +211,14 @@ if (packMode) {
   if (packProgress) packProgress.hidden = true;
   if (brandSub) {
     brandSub.textContent =
-      "Five home exercises. Squats get form cues; the rest are counted. Stays on this device.";
+      "Five home exercises — all form-coached. Stays on this device.";
   }
   packConfirmBtn.hidden = false;
   packSkipBtn.hidden = false;
   endSessionBtn.textContent = "Finish early";
+  const painCheckBtn = document.querySelector<HTMLButtonElement>("#pain-check");
+  if (painCheckBtn) painCheckBtn.hidden = false;
+  showLimitsChip();
   setStatus(
     "Start the camera when you have floor space and a place to prop your phone.",
     "ok",
@@ -328,27 +376,54 @@ function showPackSetup(): void {
   syncPackButtons();
 }
 
+function mapPackFlag(kind: string): CompensationKind {
+  if (kind === "valgus") return "valgus";
+  if (kind === "trunk") return "trunk";
+  if (kind === "incompleteDepth") return "incompleteDepth";
+  // Banner uses detail; overFlexion has no WAV (CQ2 — don't play incompleteDepth)
+  return "overFlexion";
+}
+
+function onPackFormFlag(kind: string, detail: string): void {
+  pack?.recordFormEvent(kind);
+  ui.flashViolation(mapPackFlag(kind), detail);
+}
+
+function onPackRep(n: number): void {
+  repCounterEl.textContent = String(n);
+  repCounterEl.classList.remove("bump");
+  void repCounterEl.offsetWidth;
+  repCounterEl.classList.add("bump");
+  ui.speakRep(n);
+}
+
 function startPackSession(): void {
   pack = new PackSession({
     packId: KNEE_V1_PACK_ID,
     moves: createKneeV1Moves({
+      targetReps: targetReps ?? 10,
+      maxKneeFlexionDeg: clinicalLimits.maxKneeFlexionDeg,
+      side: clinicalLimits.side,
       onSquatCompensation: (e) => {
         pack?.recordFormEvent(e.kind);
         ui.flashViolation(e.kind, e.detail);
       },
-      onSquatRep: (r) => {
-        repCounterEl.textContent = String(r.repIndex);
-        repCounterEl.classList.remove("bump");
-        void repCounterEl.offsetWidth;
-        repCounterEl.classList.add("bump");
-        ui.speakRep(r.repIndex);
-      },
+      onSquatRep: (r) => onPackRep(r.repIndex),
+      onHeelFlag: onPackFormFlag,
+      onHeelRep: onPackRep,
+      onStepFlag: onPackFormFlag,
+      onStepRep: onPackRep,
+      onSlrFlag: onPackFormFlag,
+      onSlrRep: onPackRep,
+      onBridgeFlag: onPackFormFlag,
+      onBridgeRep: onPackRep,
     }),
     onOrientation: (policy) => engine.setOrientationPolicy(policy),
   });
   packReady = true;
   pack.beginSetup();
   showPackSetup();
+  showLimitsChip();
 }
 
 function onCalibProgress(p: CalibrationProgress): void {
@@ -538,6 +613,8 @@ const engine = new PerceptionEngine({
         if (active instanceof SquatMove && phaseNow === "work") {
           const last = active.getLastResult();
           ui.render(frame.landmarks, last);
+        } else if (active instanceof HeelSlideMove && phaseNow === "work") {
+          drawGuide(frame.landmarks);
         } else {
           drawGuide(frame.landmarks);
         }

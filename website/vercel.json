@@ -4,6 +4,8 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/pack/knee-v1", "destination": "/demo/index.html" },
+    { "source": "/pack/knee-v1/", "destination": "/demo/index.html" },
     { "source": "/demo", "destination": "/demo/index.html" },
     { "source": "/demo/", "destination": "/demo/index.html" }
   ],
@@ -17,6 +19,13 @@
     },
     {
       "source": "/demo",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
+      ]
+    },
+    {
+      "source": "/pack/(.*)",
       "headers": [
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }

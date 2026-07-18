@@ -38,6 +38,7 @@ const PRIORITY: Record<string, CuePriority> = {
   valgus: 3,
   trunk: 3,
   incompleteDepth: 3,
+  overFlexion: 3,
 };
 
 const MIN_GAP_MS = 2800;

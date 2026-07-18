@@ -11,9 +11,13 @@ import {
   type SquatFrameResult,
 } from "../squat/SquatEvaluator";
 import type { ExerciseMove, MoveDosing, MoveSetup, MoveUpdateResult } from "./types";
+import { sampleForSide, type WorkingSide } from "./workingSide";
 
 export interface SquatMoveOptions {
   targetReps?: number;
+  /** Clinical max flexion → min knee angle (degrees). */
+  maxKneeFlexionDeg?: number;
+  side?: WorkingSide;
   onCompensation?: (e: CompensationEvent) => void;
   onRep?: (r: RepMetrics) => void;
 }
@@ -31,6 +35,7 @@ export class SquatMove implements ExerciseMove {
 
   private readonly squat: SquatEvaluator;
   private readonly targetReps: number;
+  private readonly side: WorkingSide;
   private flagCounts = new Map<string, number>();
   private setComplete = false;
   private lastReps = 0;
@@ -38,8 +43,10 @@ export class SquatMove implements ExerciseMove {
 
   constructor(options: SquatMoveOptions = {}) {
     this.targetReps = options.targetReps ?? 10;
+    this.side = options.side ?? "bilateral";
     this.dosing = { sets: 2, reps: this.targetReps };
     this.squat = new SquatEvaluator({
+      minKneeAngleDeg: options.maxKneeFlexionDeg,
       onCompensation: (e) => {
         this.flagCounts.set(e.kind, (this.flagCounts.get(e.kind) ?? 0) + 1);
         options.onCompensation?.(e);
@@ -81,7 +88,7 @@ export class SquatMove implements ExerciseMove {
         setComplete: this.setComplete,
       };
     }
-    const r = this.squat.update(sample, landmarks);
+    const r = this.squat.update(sampleForSide(sample, this.side), landmarks);
     this.lastResult = r;
     this.lastReps = r.reps;
     if (r.reps >= this.targetReps) this.setComplete = true;
