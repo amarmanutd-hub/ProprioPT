@@ -41,6 +41,7 @@ export function createKneeV1Moves(hooks: {
     new HeelSlideMove({
       targetReps: reps,
       maxKneeFlexionDeg: hooks.maxKneeFlexionDeg,
+      side,
       onFlag: hooks.onHeelFlag,
       onRep: hooks.onHeelRep,
     }),

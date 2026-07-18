@@ -124,11 +124,13 @@ export class CuePlayer {
     if (!isForm && now - this.lastAt < MIN_GAP_MS && priority < 2) return;
 
     if (this.playing) {
-      if (isForm || priority > this.playingPriority) {
+      // Only cut for *higher* priority — peer form cues must not talk over each other.
+      if (priority > this.playingPriority) {
         this.pending = null;
         this.stop();
       } else {
-        if (priority >= 2) this.pending = key;
+        // Queue reps/session; drop stacked form peers (stops glitching).
+        if (!isForm && priority >= 2) this.pending = key;
         return;
       }
     }

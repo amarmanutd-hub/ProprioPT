@@ -116,5 +116,43 @@ describe("HeelSlideMove", () => {
       "incompleteReturn",
       expect.anything(),
     );
+    expect(onFlag.mock.calls.filter((c) => c[0] === "incompleteFlex")).toHaveLength(
+      1,
+    );
+  });
+
+  it("locks onto the more flexed knee when L/R diverge (side view)", () => {
+    const move = new HeelSlideMove({ targetReps: 2 });
+    let t = 1000;
+    // Warm with matched knees
+    for (const k of [165, 164, 163]) {
+      move.update([], sample(k, t), t);
+      t += 33;
+    }
+    // Left stays extended, right slides — should track right only
+    const asymmetric = (L: number, R: number): BiomechanicalSample => {
+      const s = sample(L, t);
+      s.angles.leftKnee = L;
+      s.angles.rightKnee = R;
+      return s;
+    };
+    for (const [L, R] of [
+      [162, 150],
+      [162, 140],
+      [162, 125],
+      [162, 120],
+    ] as const) {
+      move.update([], asymmetric(L, R), t);
+      t += 33;
+    }
+    for (const [L, R] of [
+      [162, 135],
+      [162, 150],
+      [162, 160],
+    ] as const) {
+      move.update([], asymmetric(L, R), t);
+      t += 33;
+    }
+    expect(move.update([], asymmetric(162, 162), t).reps).toBe(1);
   });
 });
