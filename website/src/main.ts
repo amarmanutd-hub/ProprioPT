@@ -25,6 +25,23 @@ for (const a of document.querySelectorAll<HTMLAnchorElement>("[data-demo]")) {
   a.href = a.dataset.demo === "pack" ? PACK_URL : DEMO_BASE;
 }
 
+const nav = document.querySelector<HTMLElement>(".nav");
+const navToggle = document.querySelector<HTMLButtonElement>("#nav-toggle");
+const primaryNav = document.querySelector<HTMLElement>("#primary-nav");
+if (nav && navToggle && primaryNav) {
+  const setOpen = (open: boolean) => {
+    nav.classList.toggle("open", open);
+    navToggle.setAttribute("aria-expanded", String(open));
+    navToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  };
+  navToggle.addEventListener("click", () => {
+    setOpen(!nav.classList.contains("open"));
+  });
+  primaryNav.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).tagName === "A") setOpen(false);
+  });
+}
+
 const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* —— Stats count-up —— */

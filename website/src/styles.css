@@ -90,12 +90,77 @@ button:focus-visible,
   flex-shrink: 0;
 }
 
+.nav-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: rgba(242, 246, 247, 0.06);
+  color: var(--paper);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.nav-toggle-bars,
+.nav-toggle-bars::before,
+.nav-toggle-bars::after {
+  display: block;
+  width: 1rem;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  position: relative;
+}
+
+.nav-toggle-bars::before,
+.nav-toggle-bars::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.nav-toggle-bars::before {
+  top: -5px;
+}
+
+.nav-toggle-bars::after {
+  top: 5px;
+}
+
 .nav-links {
   display: none;
   gap: 1.75rem;
   font-size: 0.95rem;
   color: var(--mute);
-  margin-left: auto;
+}
+
+.nav.open .nav-links {
+  display: flex;
+  position: absolute;
+  top: var(--nav-h);
+  left: 0;
+  right: 0;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.5rem clamp(1.25rem, 4vw, 2.5rem) 1rem;
+  background: rgba(12, 20, 24, 0.96);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
+
+.nav.open .nav-links a {
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.nav.open .nav-links a:last-child {
+  border-bottom: none;
 }
 
 .nav-links a:hover {
@@ -103,17 +168,34 @@ button:focus-visible,
 }
 
 .btn-nav {
-  margin-left: auto;
   flex-shrink: 0;
 }
 
 @media (min-width: 768px) {
-  .nav-links {
-    display: flex;
+  .nav-toggle {
+    display: none;
   }
 
-  .btn-nav {
-    margin-left: 0;
+  .nav-links {
+    display: flex;
+    margin-left: auto;
+  }
+
+  .nav.open .nav-links {
+    position: static;
+    flex-direction: row;
+    gap: 1.75rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+  }
+
+  .nav.open .nav-links a {
+    padding: 0;
+    border: none;
+    font-weight: 400;
+    color: var(--mute);
   }
 }
 
