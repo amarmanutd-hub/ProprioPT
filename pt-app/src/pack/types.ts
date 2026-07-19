@@ -38,6 +38,8 @@ export interface MoveUpdateResult {
   setComplete: boolean;
   track?: "ok" | "weak" | "lost";
   trackReason?: string;
+  /** Working-limb ° for UI; null = show "—"; omit = caller may use legacy mean. */
+  displayKneeDeg?: number | null;
 }
 
 export interface ExerciseMove {

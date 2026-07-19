@@ -28,13 +28,15 @@ import {
 import { PackSession } from "./pack/PackSession";
 import { createKneeV1Moves, KNEE_V1_PACK_ID } from "./pack/kneeV1";
 import { SquatMove } from "./pack/SquatMove";
-import { HeelSlideMove } from "./pack/HeelSlideMove";
+import { kneeVisibilities } from "./tracking/workingLimb";
 import type { PackSessionPayload } from "./export/PackSessionExport";
 import type { CompensationKind } from "./squat/SquatEvaluator";
 
 const packMode =
   new URLSearchParams(location.search).get("pack") === KNEE_V1_PACK_ID ||
   /\/pack\/knee-v1\/?$/.test(location.pathname);
+const debugTrack =
+  new URLSearchParams(location.search).get("debugTrack") === "1";
 
 const video = document.querySelector<HTMLVideoElement>("#cam")!;
 const guide = document.querySelector<HTMLCanvasElement>("#guide")!;
@@ -333,6 +335,19 @@ function drawGuide(landmarks: JointLandmark[]): void {
   }
 }
 
+/** Founder-only: ?debugTrack=1 — per-knee visibility for cliff-before-flip checks. */
+function drawDebugTrack(landmarks: JointLandmark[]): void {
+  const v = kneeVisibilities(landmarks);
+  guideCtx.save();
+  guideCtx.fillStyle = "rgba(0,0,0,0.55)";
+  guideCtx.fillRect(8, 8, 168, 44);
+  guideCtx.fillStyle = "#fff";
+  guideCtx.font = "12px ui-monospace, monospace";
+  guideCtx.fillText(`L kn vis ${v.left.toFixed(2)}`, 16, 26);
+  guideCtx.fillText(`R kn vis ${v.right.toFixed(2)}`, 16, 42);
+  guideCtx.restore();
+}
+
 const ui = new PTAppUIEngine({
   canvas: guide,
   video,
@@ -594,26 +609,45 @@ const engine = new PerceptionEngine({
         : frame.landmarks;
 
       const sample = biomech.evaluate(normalized, frame.timestampMs);
-      if (sample) {
-        kneeAngleEl.textContent = `${(
-          (sample.angles.leftKnee + sample.angles.rightKnee) /
-          2
-        ).toFixed(0)}°`;
-      } else {
-        kneeAngleEl.textContent = "—";
+      const inPackWork =
+        packMode && packReady && pack && !pack.isDone();
+
+      // Pack work owns Knee bend ° (displayKneeDeg). Elsewhere: mean L/R.
+      if (!inPackWork) {
+        if (sample) {
+          kneeAngleEl.textContent = `${(
+            (sample.angles.leftKnee + sample.angles.rightKnee) /
+            2
+          ).toFixed(0)}°`;
+        } else {
+          kneeAngleEl.textContent = "—";
+        }
       }
 
       // ── Pack path ──────────────────────────────────────────────────────────
-      if (packMode && packReady && pack && !pack.isDone()) {
-        const phase = pack.getPhase();
+      if (inPackWork) {
+        const phase = pack!.getPhase();
         if (phase === "setup") {
           drawGuide(frame.landmarks);
           return;
         }
 
-        const hint = pack.update(frame.landmarks, sample, frame.timestampMs);
-        const active = pack.getActive();
-        const phaseNow = pack.getPhase();
+        const hint = pack!.update(frame.landmarks, sample, frame.timestampMs);
+        const active = pack!.getActive();
+        const phaseNow = pack!.getPhase();
+
+        if ("displayKneeDeg" in hint && hint.displayKneeDeg === null) {
+          kneeAngleEl.textContent = "—";
+        } else if (typeof hint.displayKneeDeg === "number") {
+          kneeAngleEl.textContent = `${hint.displayKneeDeg.toFixed(0)}°`;
+        } else if (sample) {
+          kneeAngleEl.textContent = `${(
+            (sample.angles.leftKnee + sample.angles.rightKnee) /
+            2
+          ).toFixed(0)}°`;
+        } else {
+          kneeAngleEl.textContent = "—";
+        }
 
         if (phaseNow === "setup") {
           showPackSetup();
@@ -623,22 +657,21 @@ const engine = new PerceptionEngine({
         }
 
         squatStateEl.textContent = hint.phaseLabel;
-        repCounterEl.textContent = String(pack.getLiveReps());
+        repCounterEl.textContent = String(pack!.getLiveReps());
 
         if (active instanceof SquatMove && phaseNow === "work") {
           const last = active.getLastResult();
           ui.render(frame.landmarks, last);
-        } else if (active instanceof HeelSlideMove && phaseNow === "work") {
-          drawGuide(frame.landmarks);
         } else {
           drawGuide(frame.landmarks);
+          if (debugTrack) drawDebugTrack(frame.landmarks);
         }
 
-        if (pack.isDone()) {
+        if (pack!.isDone()) {
           const payload = PackSessionExport.build({
-            packId: pack.packId,
-            startedAt: pack.getStartedAt(),
-            exercises: pack.getRows(),
+            packId: pack!.packId,
+            startedAt: pack!.getStartedAt(),
+            exercises: pack!.getRows(),
           });
           showPackResults(payload);
           setStatus("Pack complete — download your summary.", "ok");
@@ -653,13 +686,10 @@ const engine = new PerceptionEngine({
             hint.framingOk ? "ok" : "warn",
           );
         } else if (phaseNow === "work") {
-          const track = (
-            hint as { track?: "ok" | "weak" | "lost"; trackReason?: string }
-          ).track;
+          const track = hint.track;
           if (track === "lost" || track === "weak") {
             setStatus(
-              (hint as { trackReason?: string }).trackReason ??
-                hint.phaseLabel,
+              hint.trackReason ?? hint.phaseLabel,
               track === "lost" ? "err" : "warn",
             );
           } else {

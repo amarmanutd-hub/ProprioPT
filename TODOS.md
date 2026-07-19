@@ -38,3 +38,12 @@
 **Effort:** M
 **Priority:** P3
 **Depends on:** Form×5 hardening shipped
+
+### MediaPipe Heavy (or deeper silence) if instrument trips
+
+**What:** After heel-identity Approach B ships, run `?debugTrack=1` overlap heel set. If ≥3 reps show knee visibility &lt; WEAK_MIN for ≥3 consecutive frames *before* a lock flip, open a follow-up design for PoseLandmarker Heavy and/or stronger silence — do not sneak into the identity PR.
+**Why:** Association/ID often patches detector collapse under occlusion; instrument must decide, not vibes.
+**Context:** Eng review 2026-07-19; design `amarmalhi-master-design-heel-identity-20260719-002710.md`; exit rule locked in eng plan.
+**Effort:** M–L
+**Priority:** P3
+**Depends on:** Heel identity Approach B baked + founder overlap clip + debugTrack logs

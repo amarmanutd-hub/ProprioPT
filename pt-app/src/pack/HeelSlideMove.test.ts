@@ -106,9 +106,8 @@ describe("HeelSlideMove", () => {
       maxKneeFlexionDeg: 100,
       onFlag,
     });
-    // extend → start flexing past 100°
-    move.update(visibleLegs(), sample(165), 1000);
-    const r = move.update(visibleLegs(), sample(95), 1033);
+    move.update(separatedLegs(), sample(165), 1000);
+    const r = move.update(separatedLegs(), sample(95), 1033);
     expect(r.flags).toContain("overFlexion");
     expect(onFlag).toHaveBeenCalledWith(
       "overFlexion",
@@ -120,23 +119,20 @@ describe("HeelSlideMove", () => {
     const onRep = vi.fn();
     const move = new HeelSlideMove({ targetReps: 2, onRep });
     let t = 1000;
-    // warm baseline extended
     for (const k of [165, 164, 163, 162]) {
-      move.update(visibleLegs(), sample(k, t), t);
+      move.update(separatedLegs(), sample(k, t), t);
       t += 33;
     }
-    // slide in
     for (const k of [150, 140, 130, 120]) {
-      move.update(visibleLegs(), sample(k, t), t);
+      move.update(separatedLegs(), sample(k, t), t);
       t += 33;
     }
-    // straighten out
     for (const k of [130, 140, 150, 158, 162]) {
-      move.update(visibleLegs(), sample(k, t), t);
+      move.update(separatedLegs(), sample(k, t), t);
       t += 33;
     }
     expect(onRep).toHaveBeenCalledWith(1);
-    expect(move.update(visibleLegs(), sample(162, t), t).reps).toBe(1);
+    expect(move.update(separatedLegs(), sample(162, t), t).reps).toBe(1);
   });
 
   it("flags incompleteFlex on shallow slide (not incompleteReturn)", () => {
@@ -144,12 +140,11 @@ describe("HeelSlideMove", () => {
     const move = new HeelSlideMove({ targetReps: 5, onFlag });
     let t = 1000;
     for (const k of [165, 164, 163, 162]) {
-      move.update(visibleLegs(), sample(k, t), t);
+      move.update(separatedLegs(), sample(k, t), t);
       t += 33;
     }
-    // ~14° flex then return (below 25° depth target) — enough frames for OneEuro
     for (const k of [155, 152, 150, 148, 149, 152, 155, 158, 160, 163]) {
-      move.update(visibleLegs(), sample(k, t), t);
+      move.update(separatedLegs(), sample(k, t), t);
       t += 33;
     }
     expect(onFlag).toHaveBeenCalledWith(
@@ -174,7 +169,6 @@ describe("HeelSlideMove", () => {
       s.angles.rightKnee = R;
       return s;
     };
-    // Establish lock on right (more flexed) with separated landmarks
     for (const [L, R] of [
       [162, 150],
       [162, 140],
@@ -193,5 +187,52 @@ describe("HeelSlideMove", () => {
       t += 33;
     }
     expect(move.update(separatedLegs(), asymmetric(162, 162), t).reps).toBe(1);
+  });
+
+  it("freezes displayKneeDeg to null when knees overlap", () => {
+    const move = new HeelSlideMove({ targetReps: 5 });
+    let t = 1000;
+    move.update(separatedLegs(), sample(160, t), t);
+    t += 33;
+    const overlap = [
+      lmAt(23, 0.4, 0.4),
+      lmAt(24, 0.42, 0.4),
+      lmAt(25, 0.5, 0.55),
+      lmAt(26, 0.51, 0.55),
+      lmAt(27, 0.5, 0.7),
+      lmAt(28, 0.51, 0.7),
+    ];
+    const r = move.update(overlap, sample(140, t), t);
+    expect(r.displayKneeDeg).toBeNull();
+    expect(r.track).toBe("weak");
+  });
+
+  it("does not count a rep if silence fired mid-rep", () => {
+    const onRep = vi.fn();
+    const move = new HeelSlideMove({ targetReps: 2, onRep });
+    let t = 1000;
+    for (const k of [165, 164, 163, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    for (const k of [150, 140, 130, 120]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    const overlap = [
+      lmAt(23, 0.4, 0.4),
+      lmAt(24, 0.42, 0.4),
+      lmAt(25, 0.5, 0.55),
+      lmAt(26, 0.51, 0.55),
+      lmAt(27, 0.5, 0.7),
+      lmAt(28, 0.51, 0.7),
+    ];
+    move.update(overlap, sample(120, t), t);
+    t += 33;
+    for (const k of [130, 140, 150, 158, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    expect(onRep).not.toHaveBeenCalled();
   });
 });

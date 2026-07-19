@@ -109,4 +109,49 @@ describe("pickWorkingKnee spatial continuity", () => {
     expect(p.knee).toBe(100);
     expect(p.pos).toEqual({ x: 0.7, y: 0.5 });
   });
+
+  it("freezeLockWhenClose keeps locked side when knees collide", () => {
+    const a = pickWorkingKnee(
+      legs(0.3, 0.5, 0.7, 0.5),
+      120,
+      165,
+      undefined,
+      null,
+      null,
+      140,
+      165,
+    );
+    expect(a.lock).toBe("left");
+    const b = pickWorkingKnee(
+      legs(0.5, 0.5, 0.51, 0.5),
+      165,
+      100,
+      undefined,
+      "left",
+      a.pos,
+      165,
+      130,
+      { freezeLockWhenClose: true },
+    );
+    expect(b.lock).toBe("left");
+    expect(b.kneesClose).toBe(true);
+  });
+
+  it("velocity bias prefers predicted position", () => {
+    const last = { x: 0.4, y: 0.5 };
+    const prev = { x: 0.35, y: 0.5 }; // moving +x → predict ~0.45
+    const p = pickWorkingKnee(
+      legs(0.7, 0.5, 0.45, 0.5),
+      160,
+      120,
+      undefined,
+      "right",
+      last,
+      165,
+      140,
+      { useVelocityBias: true, prevPos: prev },
+    );
+    expect(p.lock).toBe("right");
+    expect(p.knee).toBe(120);
+  });
 });

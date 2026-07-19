@@ -125,6 +125,7 @@ export class PackSession {
     framingReason?: string;
     track?: "ok" | "weak" | "lost";
     trackReason?: string;
+    displayKneeDeg?: number | null;
   } {
     const move = this.getActive();
     if (!move || this.phase === "done" || this.phase === "setup") {
@@ -183,6 +184,7 @@ export class PackSession {
       framingOk: true,
       track: result.track,
       trackReason: result.trackReason,
+      displayKneeDeg: result.displayKneeDeg,
     };
   }
 

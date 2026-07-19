@@ -2,6 +2,7 @@
  * Working-limb selection for floor / unilaterals.
  * Prefer prescribed clinical side; else lock via screen-space continuity
  * (MediaPipe L/R labels swap on overlap — follow xy, not index).
+ * Heel may opt into velocity bias + freeze-lock-when-close; SLR leaves defaults off.
  */
 
 import type { JointLandmark } from "../perception/PerceptionEngine";
@@ -20,6 +21,17 @@ export interface WorkingLimbPick {
   hip: number;
   lock: LockedKnee | null;
   pos: KneePos | null;
+  /** True when L/R knees are spatially close (overlap risk). */
+  kneesClose: boolean;
+}
+
+/** Opt-in; defaults keep SLR behavior unchanged. */
+export interface PickWorkingKneeOpts {
+  useVelocityBias?: boolean;
+  /** Previous frame pos (with lastPos) for constant-velocity prediction. */
+  prevPos?: KneePos | null;
+  /** When knees close and locked, never switch side. */
+  freezeLockWhenClose?: boolean;
 }
 
 const L_HIP = 23;
@@ -33,6 +45,8 @@ const R_ANK = 28;
 const HYSTERESIS = 1.35;
 const VIS_MIN = 0.15;
 const FLEX_LOCK_DELTA = 18;
+/** Image-normalized knee–knee distance² (~0.045 apart). */
+export const KNEE_CLOSE_DIST2 = 0.045 * 0.045;
 
 export function chainVisibility(
   landmarks: JointLandmark[],
@@ -46,6 +60,28 @@ export function chainVisibility(
     if (v < min) min = v;
   }
   return min;
+}
+
+export function kneeVisibilities(landmarks: JointLandmark[]): {
+  left: number;
+  right: number;
+} {
+  const map = new Map(landmarks.map((l) => [l.index, l]));
+  return {
+    left: map.get(L_KN)?.visibility ?? 0,
+    right: map.get(R_KN)?.visibility ?? 0,
+  };
+}
+
+export function kneesClose(landmarks: JointLandmark[]): boolean {
+  const map = new Map(landmarks.map((l) => [l.index, l]));
+  const l = map.get(L_KN);
+  const r = map.get(R_KN);
+  if (!l || !r) return false;
+  if ((l.visibility ?? 0) < VIS_MIN || (r.visibility ?? 0) < VIS_MIN) {
+    return false;
+  }
+  return dist2(l, r) <= KNEE_CLOSE_DIST2;
 }
 
 function dist2(a: KneePos, b: KneePos): number {
@@ -68,6 +104,7 @@ function pickFromSide(
   leftHip: number,
   rightHip: number,
   map: Map<number, JointLandmark>,
+  close: boolean,
 ): WorkingLimbPick {
   const lm = kneeLm(map, side);
   return {
@@ -75,6 +112,7 @@ function pickFromSide(
     hip: side === "left" ? leftHip : rightHip,
     lock: side,
     pos: lm ? { x: lm.x, y: lm.y } : null,
+    kneesClose: close,
   };
 }
 
@@ -91,12 +129,43 @@ export function pickWorkingKnee(
   lastPos: KneePos | null = null,
   leftHip = 170,
   rightHip = 170,
+  opts: PickWorkingKneeOpts = {},
 ): WorkingLimbPick {
   const map = new Map(landmarks.map((l) => [l.index, l]));
   const lKn = map.get(L_KN);
   const rKn = map.get(R_KN);
+  const close = kneesClose(landmarks);
 
-  if (lastPos) {
+  if (
+    opts.freezeLockWhenClose &&
+    close &&
+    (locked === "left" || locked === "right")
+  ) {
+    return pickFromSide(
+      locked,
+      leftKnee,
+      rightKnee,
+      leftHip,
+      rightHip,
+      map,
+      close,
+    );
+  }
+
+  let refPos = lastPos;
+  if (
+    opts.useVelocityBias &&
+    lastPos &&
+    opts.prevPos &&
+    Number.isFinite(opts.prevPos.x)
+  ) {
+    refPos = {
+      x: lastPos.x + (lastPos.x - opts.prevPos.x),
+      y: lastPos.y + (lastPos.y - opts.prevPos.y),
+    };
+  }
+
+  if (refPos) {
     type Cand = {
       side: LockedKnee;
       d: number;
@@ -108,7 +177,7 @@ export function pickWorkingKnee(
     if (lKn && (lKn.visibility ?? 0) >= VIS_MIN) {
       cands.push({
         side: "left",
-        d: dist2(lastPos, lKn),
+        d: dist2(refPos, lKn),
         knee: leftKnee,
         hip: leftHip,
         pos: { x: lKn.x, y: lKn.y },
@@ -117,7 +186,7 @@ export function pickWorkingKnee(
     if (rKn && (rKn.visibility ?? 0) >= VIS_MIN) {
       cands.push({
         side: "right",
-        d: dist2(lastPos, rKn),
+        d: dist2(refPos, rKn),
         knee: rightKnee,
         hip: rightHip,
         pos: { x: rKn.x, y: rKn.y },
@@ -135,6 +204,7 @@ export function pickWorkingKnee(
         hip: best.hip,
         lock: best.side,
         pos: best.pos,
+        kneesClose: close,
       };
     }
   }
@@ -147,11 +217,20 @@ export function pickWorkingKnee(
       leftHip,
       rightHip,
       map,
+      close,
     );
   }
 
   if (locked === "left" || locked === "right") {
-    return pickFromSide(locked, leftKnee, rightKnee, leftHip, rightHip, map);
+    return pickFromSide(
+      locked,
+      leftKnee,
+      rightKnee,
+      leftHip,
+      rightHip,
+      map,
+      close,
+    );
   }
 
   const lv = lKn?.visibility ?? 0;
@@ -159,23 +238,46 @@ export function pickWorkingKnee(
 
   if (Math.abs(leftKnee - rightKnee) >= FLEX_LOCK_DELTA) {
     const next: LockedKnee = leftKnee < rightKnee ? "left" : "right";
-    return pickFromSide(next, leftKnee, rightKnee, leftHip, rightHip, map);
+    return pickFromSide(
+      next,
+      leftKnee,
+      rightKnee,
+      leftHip,
+      rightHip,
+      map,
+      close,
+    );
   }
 
   if (lv > 0.35 && rv < 0.22) {
-    return pickFromSide("left", leftKnee, rightKnee, leftHip, rightHip, map);
+    return pickFromSide(
+      "left",
+      leftKnee,
+      rightKnee,
+      leftHip,
+      rightHip,
+      map,
+      close,
+    );
   }
   if (rv > 0.35 && lv < 0.22) {
-    return pickFromSide("right", leftKnee, rightKnee, leftHip, rightHip, map);
+    return pickFromSide(
+      "right",
+      leftKnee,
+      rightKnee,
+      leftHip,
+      rightHip,
+      map,
+      close,
+    );
   }
 
-  // Ambiguous — use more flexed angle this frame but do not lock/pos yet
-  // (avoids sticking to the wrong side before flex delta is clear).
   const softLeft = leftKnee <= rightKnee;
   return {
     knee: softLeft ? leftKnee : rightKnee,
     hip: softLeft ? leftHip : rightHip,
     lock: null,
     pos: null,
+    kneesClose: close,
   };
 }

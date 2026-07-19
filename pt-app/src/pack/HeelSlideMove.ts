@@ -1,6 +1,6 @@
 /**
  * Heel slides — form-coached ROM cycle (incomplete flex + over-flexion).
- * Floor diagonal: working-limb lock + track confidence + angle smooth.
+ * Floor diagonal: working-limb lock + silence on overlap/weak + clean-cycle reps.
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
@@ -50,6 +50,9 @@ export class HeelSlideMove implements ExerciseMove {
   private shallowLatched = false;
   private locked: LockedKnee | null = null;
   private lastKneePos: KneePos | null = null;
+  private prevKneePos: KneePos | null = null;
+  /** Mid-rep silence / identity glitch — do not count this cycle. */
+  private dirtyThisRep = false;
 
   constructor(options: HeelSlideMoveOptions = {}) {
     this.targetReps = options.targetReps ?? 10;
@@ -72,6 +75,8 @@ export class HeelSlideMove implements ExerciseMove {
     this.locked =
       this.side === "left" || this.side === "right" ? this.side : null;
     this.lastKneePos = null;
+    this.prevKneePos = null;
+    this.dirtyThisRep = false;
     this.kneeFilter.reset();
   }
 
@@ -89,10 +94,12 @@ export class HeelSlideMove implements ExerciseMove {
         phaseLabel: "Set complete",
         setComplete: true,
         track: "ok",
+        displayKneeDeg: null,
       };
     }
 
     if (track.level === "lost" || !sample) {
+      this.markDirtyIfActive();
       return {
         reps: this.reps,
         flags: [],
@@ -100,9 +107,11 @@ export class HeelSlideMove implements ExerciseMove {
         setComplete: false,
         track: "lost",
         trackReason: track.reason,
+        displayKneeDeg: null,
       };
     }
 
+    const prevLock = this.locked;
     const picked = pickWorkingKnee(
       landmarks,
       sample.angles.leftKnee,
@@ -112,14 +121,51 @@ export class HeelSlideMove implements ExerciseMove {
       this.lastKneePos,
       sample.angles.leftHip,
       sample.angles.rightHip,
+      {
+        useVelocityBias: true,
+        prevPos: this.prevKneePos,
+        freezeLockWhenClose: true,
+      },
     );
+
+    if (
+      prevLock &&
+      picked.lock &&
+      picked.lock !== prevLock &&
+      !picked.kneesClose
+    ) {
+      this.markDirtyIfActive();
+    }
+
     if (picked.lock) this.locked = picked.lock;
-    if (picked.pos) this.lastKneePos = picked.pos;
+    if (picked.pos) {
+      this.prevKneePos = this.lastKneePos;
+      this.lastKneePos = picked.pos;
+    }
+
+    const silence = track.level === "weak" || picked.kneesClose;
+
+    if (silence) {
+      this.markDirtyIfActive();
+      const reason =
+        track.level === "weak"
+          ? track.reason
+          : "Tracking paused — keep the working leg clear";
+      return {
+        reps: this.reps,
+        flags: [],
+        phaseLabel: reason,
+        setComplete: false,
+        track: track.level === "ok" ? "weak" : track.level,
+        trackReason: reason,
+        displayKneeDeg: null,
+      };
+    }
+
     const rawKnee = picked.knee;
     const knee = this.kneeFilter.filter(rawKnee, t);
     const flags: string[] = [];
 
-    // Clinical limit on raw angle — filter must not delay safety cues.
     if (rawKnee < this.minKneeAngle - 2) {
       flags.push("overFlexion");
       if (!this.overLogged) {
@@ -132,11 +178,9 @@ export class HeelSlideMove implements ExerciseMove {
     }
 
     if (this.phase === "extend") {
-      // Refresh standing baseline only near extension — not while sliding.
       if (knee >= this.baselineKnee - 8) {
         this.baselineKnee = this.baselineKnee * 0.9 + knee * 0.1;
       }
-      // Track deepest on raw so filter lag doesn't hide incomplete flex.
       if (rawKnee < this.minThisRep) this.minThisRep = rawKnee;
 
       const flexedEnough = knee <= this.baselineKnee - 25;
@@ -147,18 +191,14 @@ export class HeelSlideMove implements ExerciseMove {
         return {
           reps: this.reps,
           flags,
-          phaseLabel:
-            track.level === "weak"
-              ? track.reason
-              : "Straighten the knee",
+          phaseLabel: "Straighten the knee",
           setComplete: false,
-          track: track.level,
-          trackReason: track.reason,
+          track: "ok",
+          displayKneeDeg: knee,
         };
       }
 
       const attempt = this.baselineKnee - this.minThisRep;
-      // Fire when they abandon the shallow attempt (re-extend ≥8° from trough).
       if (
         attempt >= 10 &&
         attempt < 25 &&
@@ -178,7 +218,6 @@ export class HeelSlideMove implements ExerciseMove {
         rawKnee >= this.baselineKnee - 5 &&
         this.baselineKnee - this.minThisRep < 10
       ) {
-        // Clear only if we never made a meaningful flex attempt.
         this.minThisRep = 180;
         this.shallowLatched = false;
       }
@@ -186,37 +225,41 @@ export class HeelSlideMove implements ExerciseMove {
       return {
         reps: this.reps,
         flags,
-        phaseLabel:
-          track.level === "weak" ? track.reason : "Slide heel in",
+        phaseLabel: "Slide heel in",
         setComplete: false,
-        track: track.level,
-        trackReason: track.reason,
+        track: "ok",
+        displayKneeDeg: knee,
       };
     }
 
     if (knee < this.minThisRep) this.minThisRep = knee;
     const returned = knee >= this.baselineKnee - 12;
     if (returned) {
-      this.reps += 1;
-      this.onRep?.(this.reps);
-      if (this.reps >= this.targetReps) this.setComplete = true;
+      if (!this.dirtyThisRep) {
+        this.reps += 1;
+        this.onRep?.(this.reps);
+        if (this.reps >= this.targetReps) this.setComplete = true;
+      }
       this.phase = "extend";
       this.minThisRep = 180;
       this.overLogged = false;
       this.shallowLatched = false;
+      this.dirtyThisRep = false;
     }
 
     return {
       reps: this.reps,
       flags,
-      phaseLabel: this.setComplete
-        ? "Set complete"
-        : track.level === "weak"
-          ? track.reason
-          : "Straighten the knee",
+      phaseLabel: this.setComplete ? "Set complete" : "Straighten the knee",
       setComplete: this.setComplete,
-      track: track.level,
-      trackReason: track.reason,
+      track: "ok",
+      displayKneeDeg: this.setComplete ? null : knee,
     };
+  }
+
+  private markDirtyIfActive(): void {
+    if (this.phase === "flex" || this.minThisRep < 170) {
+      this.dirtyThisRep = true;
+    }
   }
 }
