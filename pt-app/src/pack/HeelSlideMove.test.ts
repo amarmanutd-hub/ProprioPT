@@ -22,6 +22,31 @@ function visibleLegs(): JointLandmark[] {
   return [23, 24, 25, 26, 27, 28].map((i) => lm(i));
 }
 
+/** Spatially separated knees — needed for L/R lock tests. */
+function separatedLegs(): JointLandmark[] {
+  return [
+    lmAt(23, 0.35, 0.4),
+    lmAt(24, 0.55, 0.4),
+    lmAt(25, 0.35, 0.55),
+    lmAt(26, 0.55, 0.55),
+    lmAt(27, 0.35, 0.7),
+    lmAt(28, 0.55, 0.7),
+  ];
+}
+
+function lmAt(index: number, x: number, y: number, vis = 0.9): JointLandmark {
+  return {
+    index,
+    x,
+    y,
+    z: 0,
+    visibility: vis,
+    worldX: x,
+    worldY: y,
+    worldZ: 0,
+  };
+}
+
 function sample(knee: number, t = 1000): BiomechanicalSample {
   return {
     timestampMs: t,
@@ -143,25 +168,20 @@ describe("HeelSlideMove", () => {
   it("locks onto the more flexed knee when L/R diverge (side view)", () => {
     const move = new HeelSlideMove({ targetReps: 2 });
     let t = 1000;
-    // Warm with matched knees
-    for (const k of [165, 164, 163]) {
-      move.update(visibleLegs(), sample(k, t), t);
-      t += 33;
-    }
-    // Left stays extended, right slides — should track right only
     const asymmetric = (L: number, R: number): BiomechanicalSample => {
       const s = sample(L, t);
       s.angles.leftKnee = L;
       s.angles.rightKnee = R;
       return s;
     };
+    // Establish lock on right (more flexed) with separated landmarks
     for (const [L, R] of [
       [162, 150],
       [162, 140],
       [162, 125],
       [162, 120],
     ] as const) {
-      move.update(visibleLegs(), asymmetric(L, R), t);
+      move.update(separatedLegs(), asymmetric(L, R), t);
       t += 33;
     }
     for (const [L, R] of [
@@ -169,9 +189,9 @@ describe("HeelSlideMove", () => {
       [162, 150],
       [162, 160],
     ] as const) {
-      move.update(visibleLegs(), asymmetric(L, R), t);
+      move.update(separatedLegs(), asymmetric(L, R), t);
       t += 33;
     }
-    expect(move.update(visibleLegs(), asymmetric(162, 162), t).reps).toBe(1);
+    expect(move.update(separatedLegs(), asymmetric(162, 162), t).reps).toBe(1);
   });
 });

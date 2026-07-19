@@ -78,59 +78,44 @@ describe("SlrMove", () => {
 });
 
 describe("GluteBridgeMove", () => {
-  it("counts lift → hold → lower", () => {
+  it("counts lift → hold → lower via hip extension", () => {
     const onRep = vi.fn();
     const move = new GluteBridgeMove({ targetReps: 2, holdSec: 0.3, onRep });
     let t = 1000;
-    const hips = (y: number) => [
-      lm(23, 0.25, y),
-      lm(24, 0.28, y + 0.005),
-      lm(25, 0.45, 0.5),
-      lm(26, 0.48, 0.52),
-      lm(27, 0.7, 0.5),
-      lm(28, 0.72, 0.52),
-    ];
+    // Rest baseline ~100°, then extend toward 130°+, hold, return
     for (let i = 0; i < 4; i++) {
-      move.update(hips(0.55), sample(140, t, 140), t);
+      move.update(legs(), sample(140, t, 100), t);
       t += 33;
     }
-    for (const y of [0.5, 0.46, 0.42, 0.4]) {
-      move.update(hips(y), sample(140, t, 140), t);
+    for (const hip of [108, 115, 122, 128]) {
+      move.update(legs(), sample(140, t, hip), t);
       t += 33;
     }
     for (let i = 0; i < 15; i++) {
-      move.update(hips(0.4), sample(140, t, 140), t);
+      move.update(legs(), sample(140, t, 130), t);
       t += 33;
     }
-    move.update(hips(0.54), sample(140, t, 140), t);
+    move.update(legs(), sample(140, t, 102), t);
     expect(onRep).toHaveBeenCalledWith(1);
   });
 
-  it("counts when lift increases image Y (flipped polarity)", () => {
+  it("counts when lift decreases hip angle (flipped polarity)", () => {
     const onRep = vi.fn();
     const move = new GluteBridgeMove({ targetReps: 2, holdSec: 0.3, onRep });
     let t = 1000;
-    const hips = (y: number) => [
-      lm(23, 0.25, y),
-      lm(24, 0.28, y + 0.005),
-      lm(25, 0.45, 0.5),
-      lm(26, 0.48, 0.52),
-      lm(27, 0.7, 0.5),
-      lm(28, 0.72, 0.52),
-    ];
     for (let i = 0; i < 4; i++) {
-      move.update(hips(0.4), sample(140, t, 140), t);
+      move.update(legs(), sample(140, t, 150), t);
       t += 33;
     }
-    for (const y of [0.45, 0.5, 0.55, 0.58]) {
-      move.update(hips(y), sample(140, t, 140), t);
+    for (const hip of [142, 135, 128, 120]) {
+      move.update(legs(), sample(140, t, hip), t);
       t += 33;
     }
     for (let i = 0; i < 15; i++) {
-      move.update(hips(0.58), sample(140, t, 140), t);
+      move.update(legs(), sample(140, t, 118), t);
       t += 33;
     }
-    move.update(hips(0.42), sample(140, t, 140), t);
+    move.update(legs(), sample(140, t, 148), t);
     expect(onRep).toHaveBeenCalledWith(1);
   });
 });

@@ -1,10 +1,16 @@
 /**
  * Straight leg raise — form-coached (bent knee / quad lag, incomplete height).
+ * Working-limb lock via screen-space continuity (same as heel slides).
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
 import type { JointLandmark } from "../perception/PerceptionEngine";
 import { assessTrack } from "../tracking/TrackConfidence";
+import {
+  pickWorkingKnee,
+  type KneePos,
+  type LockedKnee,
+} from "../tracking/workingLimb";
 import type { ExerciseMove, MoveDosing, MoveSetup, MoveUpdateResult } from "./types";
 
 export interface SlrMoveOptions {
@@ -34,6 +40,8 @@ export class SlrMove implements ExerciseMove {
   private peakHipFlex = 180;
   private bentLogged = false;
   private setComplete = false;
+  private locked: LockedKnee | null = null;
+  private lastKneePos: KneePos | null = null;
 
   constructor(options: SlrMoveOptions = {}) {
     this.targetReps = options.targetReps ?? 10;
@@ -49,6 +57,8 @@ export class SlrMove implements ExerciseMove {
     this.peakHipFlex = 180;
     this.bentLogged = false;
     this.setComplete = false;
+    this.locked = null;
+    this.lastKneePos = null;
   }
 
   update(
@@ -56,7 +66,7 @@ export class SlrMove implements ExerciseMove {
     sample: BiomechanicalSample | null,
     _t: number,
   ): MoveUpdateResult {
-    const track = assessTrack(landmarks, null, undefined);
+    const track = assessTrack(landmarks, this.locked, undefined);
 
     if (this.setComplete) {
       return {
@@ -79,9 +89,21 @@ export class SlrMove implements ExerciseMove {
       };
     }
 
-    // Working leg ≈ more flexed hip (smaller internal angle when lifting)
-    const hip = Math.min(sample.angles.leftHip, sample.angles.rightHip);
-    const knee = Math.min(sample.angles.leftKnee, sample.angles.rightKnee);
+    const picked = pickWorkingKnee(
+      landmarks,
+      sample.angles.leftKnee,
+      sample.angles.rightKnee,
+      undefined,
+      this.locked,
+      this.lastKneePos,
+      sample.angles.leftHip,
+      sample.angles.rightHip,
+    );
+    if (picked.lock) this.locked = picked.lock;
+    if (picked.pos) this.lastKneePos = picked.pos;
+
+    const hip = picked.hip;
+    const knee = picked.knee;
     const flags: string[] = [];
     const label = (ok: string) =>
       track.level === "weak" ? track.reason : ok;

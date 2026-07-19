@@ -9,6 +9,7 @@ import { OneEuroAngle } from "../tracking/OneEuroAngle";
 import { assessTrack } from "../tracking/TrackConfidence";
 import {
   pickWorkingKnee,
+  type KneePos,
   type LockedKnee,
   type WorkingSide,
 } from "../tracking/workingLimb";
@@ -48,6 +49,7 @@ export class HeelSlideMove implements ExerciseMove {
   private overLogged = false;
   private shallowLatched = false;
   private locked: LockedKnee | null = null;
+  private lastKneePos: KneePos | null = null;
 
   constructor(options: HeelSlideMoveOptions = {}) {
     this.targetReps = options.targetReps ?? 10;
@@ -69,6 +71,7 @@ export class HeelSlideMove implements ExerciseMove {
     this.shallowLatched = false;
     this.locked =
       this.side === "left" || this.side === "right" ? this.side : null;
+    this.lastKneePos = null;
     this.kneeFilter.reset();
   }
 
@@ -106,8 +109,12 @@ export class HeelSlideMove implements ExerciseMove {
       sample.angles.rightKnee,
       this.side,
       this.locked,
+      this.lastKneePos,
+      sample.angles.leftHip,
+      sample.angles.rightHip,
     );
     if (picked.lock) this.locked = picked.lock;
+    if (picked.pos) this.lastKneePos = picked.pos;
     const rawKnee = picked.knee;
     const knee = this.kneeFilter.filter(rawKnee, t);
     const flags: string[] = [];

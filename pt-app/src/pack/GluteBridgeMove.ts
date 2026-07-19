@@ -1,6 +1,6 @@
 /**
  * Glute bridge — form-coached (incomplete lift, uneven hips).
- * Lift direction learned from first significant hip motion (dual polarity).
+ * Lift from hip-angle delta (diagonal-camera stable); Y only for uneven cue.
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
@@ -15,13 +15,8 @@ export interface GluteBridgeMoveOptions {
   onRep?: (repIndex: number) => void;
 }
 
-function midHipY(landmarks: JointLandmark[]): number | null {
-  const l = landmarks.find((p) => p.index === 23 && p.visibility >= 0.3);
-  const r = landmarks.find((p) => p.index === 24 && p.visibility >= 0.3);
-  if (l && r) return (l.y + r.y) / 2;
-  if (l) return l.y;
-  if (r) return r.y;
-  return null;
+function meanHip(sample: BiomechanicalSample): number {
+  return (sample.angles.leftHip + sample.angles.rightHip) / 2;
 }
 
 function hipSkew(landmarks: JointLandmark[]): number | null {
@@ -49,12 +44,13 @@ export class GluteBridgeMove implements ExerciseMove {
 
   private reps = 0;
   private phase: "rest" | "lift" | "hold" = "rest";
-  private baselineY: number | null = null;
-  /** Sign of (y - baseline) at first lift; liftMag = max(0, (y-baseline)*sign). */
+  private baselineHip: number | null = null;
+  /** Sign of (hip - baseline) at first lift. */
   private liftSign: number | null = null;
   private peakLift = 0;
   private holdStartMs: number | null = null;
   private unevenLogged = false;
+  private incompleteLatched = false;
   private setComplete = false;
 
   constructor(options: GluteBridgeMoveOptions = {}) {
@@ -68,11 +64,12 @@ export class GluteBridgeMove implements ExerciseMove {
   reset(): void {
     this.reps = 0;
     this.phase = "rest";
-    this.baselineY = null;
+    this.baselineHip = null;
     this.liftSign = null;
     this.peakLift = 0;
     this.holdStartMs = null;
     this.unevenLogged = false;
+    this.incompleteLatched = false;
     this.setComplete = false;
   }
 
@@ -104,35 +101,25 @@ export class GluteBridgeMove implements ExerciseMove {
       };
     }
 
-    const y = midHipY(landmarks);
+    const hip = meanHip(sample);
     const flags: string[] = [];
     const label = (ok: string) =>
       track.level === "weak" ? track.reason : ok;
 
-    if (y == null) {
-      return {
-        reps: this.reps,
-        flags,
-        phaseLabel: "Hips in frame",
-        setComplete: false,
-        track: "weak",
-        trackReason: "Hips in frame",
-      };
-    }
-
-    if (this.baselineY == null) this.baselineY = y;
-    const delta = y - this.baselineY;
+    if (this.baselineHip == null) this.baselineHip = hip;
+    const delta = hip - this.baselineHip;
     const abs = Math.abs(delta);
 
     if (this.phase === "rest") {
-      if (abs < 0.02) {
-        this.baselineY = this.baselineY * 0.92 + y * 0.08;
+      if (abs < 4) {
+        this.baselineHip = this.baselineHip * 0.92 + hip * 0.08;
       }
-      if (abs >= 0.04) {
+      if (abs >= 8) {
         this.liftSign = delta >= 0 ? 1 : -1;
         this.phase = "lift";
         this.peakLift = abs;
         this.unevenLogged = false;
+        this.incompleteLatched = false;
       }
       return {
         reps: this.reps,
@@ -161,15 +148,18 @@ export class GluteBridgeMove implements ExerciseMove {
     }
 
     if (this.phase === "lift") {
-      if (liftMag >= 0.055 && liftMag >= this.peakLift - 0.01) {
+      if (liftMag >= 12 && liftMag >= this.peakLift - 2) {
         this.phase = "hold";
         this.holdStartMs = t;
-      } else if (liftMag < 0.025) {
-        flags.push("incompleteLift");
-        this.onFlag?.(
-          "incompleteLift",
-          "Lift higher — squeeze glutes at the top.",
-        );
+      } else if (liftMag < 4) {
+        if (this.peakLift >= 5 && !this.incompleteLatched) {
+          flags.push("incompleteLift");
+          this.incompleteLatched = true;
+          this.onFlag?.(
+            "incompleteLift",
+            "Lift higher — squeeze glutes at the top.",
+          );
+        }
         this.phase = "rest";
         this.peakLift = 0;
         this.unevenLogged = false;
@@ -185,19 +175,25 @@ export class GluteBridgeMove implements ExerciseMove {
     }
 
     const held = this.holdStartMs != null ? (t - this.holdStartMs) / 1000 : 0;
-    if (liftMag < 0.03) {
-      if (this.peakLift < 0.05) {
-        flags.push("incompleteLift");
-        this.onFlag?.(
-          "incompleteLift",
-          "Lift higher — squeeze glutes at the top.",
-        );
+    if (liftMag < 5) {
+      if (this.peakLift < 10) {
+        if (!this.incompleteLatched) {
+          flags.push("incompleteLift");
+          this.incompleteLatched = true;
+          this.onFlag?.(
+            "incompleteLift",
+            "Lift higher — squeeze glutes at the top.",
+          );
+        }
       } else if (held < this.holdSec * 0.4) {
-        flags.push("incompleteLift");
-        this.onFlag?.(
-          "incompleteLift",
-          `Hold ~${this.holdSec}s at the top before lowering.`,
-        );
+        if (!this.incompleteLatched) {
+          flags.push("incompleteLift");
+          this.incompleteLatched = true;
+          this.onFlag?.(
+            "incompleteLift",
+            `Hold ~${this.holdSec}s at the top before lowering.`,
+          );
+        }
       } else {
         this.reps += 1;
         this.onRep?.(this.reps);
@@ -207,6 +203,7 @@ export class GluteBridgeMove implements ExerciseMove {
       this.peakLift = 0;
       this.holdStartMs = null;
       this.unevenLogged = false;
+      this.incompleteLatched = false;
       return {
         reps: this.reps,
         flags,
