@@ -170,7 +170,7 @@ export class PackSession {
 
     // work — latch counts only via recordFormEvent (onFlag / squat compensations)
     const result = move.update(landmarks, sample, t);
-    this.liveReps = this.repsThisExercise + result.reps;
+    this.liveReps = result.reps;
     this.liveFlags = result.flags;
     if (result.setComplete) {
       this.onSetComplete(result, t);

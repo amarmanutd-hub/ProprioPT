@@ -7,6 +7,7 @@
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
+import { imageKneeInteriorDeg } from "../biomechanics/BiomechanicalEvaluator";
 import type { JointLandmark } from "../perception/PerceptionEngine";
 import { OneEuroAngle } from "../tracking/OneEuroAngle";
 import { assessTrack } from "../tracking/TrackConfidence";
@@ -182,7 +183,13 @@ export class HeelSlideMove implements ExerciseMove {
     }
 
     const hideDeg = picked.kneesClose;
-    const rawKnee = picked.knee;
+    // Floor diagonal: 3D often under-reports bend; take the more flexed reading.
+    const imgKnee =
+      picked.lock != null
+        ? imageKneeInteriorDeg(landmarks, picked.lock)
+        : null;
+    const rawKnee =
+      imgKnee != null ? Math.min(imgKnee, picked.knee) : picked.knee;
     const knee = this.kneeFilter.filter(rawKnee, t);
     const flags: string[] = [];
     const flexDisp = hideDeg ? null : toFlexionDeg(knee);

@@ -207,10 +207,20 @@ describe("HeelSlideMove", () => {
     expect(r.track).toBe("weak");
   });
 
-  it("shows clinical flexion (0≈straight) not interior angle", () => {
-    const move = new HeelSlideMove({ targetReps: 5 });
-    const r = move.update(separatedLegs(), sample(160, 1000), 1000);
-    expect(r.displayKneeDeg).toBeCloseTo(20, 0);
+  it("uses more-flexed of image vs sample for display", () => {
+    const move = new HeelSlideMove({ targetReps: 5, side: "right" });
+    // Image: clearly bent (~90° interior). Sample claims nearly straight.
+    const bentRight = [
+      lmAt(23, 0.35, 0.4),
+      lmAt(24, 0.55, 0.4),
+      lmAt(25, 0.35, 0.55),
+      lmAt(26, 0.7, 0.45), // knee forward
+      lmAt(27, 0.35, 0.7),
+      lmAt(28, 0.55, 0.7), // ankle back → bent
+    ];
+    const r = move.update(bentRight, sample(170, 1000), 1000);
+    expect(r.displayKneeDeg).not.toBeNull();
+    expect(r.displayKneeDeg!).toBeGreaterThan(40);
   });
 
   it("still counts when deep flex happens under knee overlap", () => {

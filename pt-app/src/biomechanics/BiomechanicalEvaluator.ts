@@ -331,6 +331,36 @@ export function jointAngleDeg(a: Vec3, b: Vec3, c: Vec3): number {
   return (Math.acos(cos) * 180) / Math.PI;
 }
 
+/**
+ * 2D image-plane knee interior angle (hip–knee–ankle). Prefer this for floor
+ * diagonal moves — world landmarks foreshorten and under-report flexion.
+ */
+export function imageKneeInteriorDeg(
+  landmarks: JointLandmark[],
+  side: "left" | "right",
+): number | null {
+  const hipI = side === "left" ? L_HIP : R_HIP;
+  const knI = side === "left" ? L_KN : R_KN;
+  const anI = side === "left" ? L_ANK : R_ANK;
+  const map = new Map(landmarks.map((l) => [l.index, l]));
+  const hip = map.get(hipI);
+  const kn = map.get(knI);
+  const an = map.get(anI);
+  if (!hip || !kn || !an) return null;
+  if (
+    !visibleEnough(hip, 0.25) ||
+    !visibleEnough(kn, 0.25) ||
+    !visibleEnough(an, 0.25)
+  ) {
+    return null;
+  }
+  return jointAngleDeg(
+    { x: hip.x, y: hip.y, z: 0 },
+    { x: kn.x, y: kn.y, z: 0 },
+    { x: an.x, y: an.y, z: 0 },
+  );
+}
+
 function chainOk(
   map: Map<number, JointLandmark>,
   hip: number,
