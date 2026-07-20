@@ -39,7 +39,7 @@ export class HeelSlideMove implements ExerciseMove {
   private readonly side: WorkingSide;
   private readonly onFlag?: (kind: string, detail: string) => void;
   private readonly onRep?: (repIndex: number) => void;
-  private readonly kneeFilter = new OneEuroAngle(2.8, 0.04, 1.0);
+  private readonly kneeFilter = new OneEuroAngle(3.6, 0.08, 1.0);
 
   private reps = 0;
   private phase: "extend" | "flex" = "extend";

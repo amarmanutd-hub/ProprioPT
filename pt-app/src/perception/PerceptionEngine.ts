@@ -10,6 +10,8 @@ import {
   PoseLandmarker,
   type PoseLandmarkerResult,
 } from "@mediapipe/tasks-vision";
+import { LegBonesTracker } from "../tracking/legBones";
+import { kneesClose } from "../tracking/workingLimb";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,12 +105,13 @@ const LR_FLIP_RATIO = 0.72;
 const LR_FLIP_STREAK = 2;
 
 /** EMA blend toward raw — base rates; motion boosts toward ALPHA_FAST*. */
-const ALPHA_UPPER = 0.45;
-const ALPHA_HIP = 0.35;
-const ALPHA_KNEE = 0.3;
-const ALPHA_ANKLE = 0.2;
-const ALPHA_FAST_KNEE = 0.72;
-const ALPHA_FAST_ANKLE = 0.48;
+const ALPHA_UPPER = 0.55;
+const ALPHA_HIP = 0.42;
+const ALPHA_KNEE = 0.38;
+const ALPHA_ANKLE = 0.28;
+const ALPHA_FAST_UPPER = 0.85;
+const ALPHA_FAST_KNEE = 0.88;
+const ALPHA_FAST_ANKLE = 0.75;
 const VIS_HOLD_LOWER = 0.35;
 const LOWER_MEDIAN_N = 3;
 /** Only median when nearly still (fraction of hip width). */
@@ -162,6 +165,8 @@ export class PerceptionEngine {
   private lowerHistory = new Map<number, SmoothedJoint[]>();
   /** Consecutive frames where swap beats keep, per L/R pair key. */
   private lrFlipStreak = new Map<string, number>();
+  /** Soft bone-length seatbelt (hipWidth-normalized). */
+  private readonly legBones = new LegBonesTracker();
 
   constructor(options: PerceptionEngineOptions) {
     this.video = options.video;
@@ -283,6 +288,7 @@ export class PerceptionEngine {
     this.smoothState.clear();
     this.lowerHistory.clear();
     this.lrFlipStreak.clear();
+    this.legBones.reset();
     this.loop();
   }
 
@@ -298,6 +304,7 @@ export class PerceptionEngine {
     this.smoothState.clear();
     this.lowerHistory.clear();
     this.lrFlipStreak.clear();
+    this.legBones.reset();
     this.alerts.onHalt?.("user", "Perception stopped.");
   }
 
@@ -543,16 +550,84 @@ export class PerceptionEngine {
     // Undo left/right ID flips before EMA (smoothing alone can't fix identity swaps).
     this.stabilizeLaterality(byIndex);
 
-    const out: JointLandmark[] = [];
+    // Pre-EMA: clamp + learn bone lengths from clear frames.
+    const prepared = new Map<number, JointLandmark>();
     for (const idx of this.activeIndices()) {
       const raw = byIndex.get(idx);
       if (!raw) continue;
-      // Median only while still — during bends it adds visible lag.
       const gated = this.maybeMedianLowerBody(raw);
-      const clamped = this.clampLowerJump(gated);
+      prepared.set(idx, this.clampLowerJump(gated));
+    }
+    this.observeLegBones(prepared);
+
+    const out: JointLandmark[] = [];
+    for (const idx of this.activeIndices()) {
+      const clamped = prepared.get(idx);
+      if (!clamped) continue;
       out.push(this.smoothLandmark(clamped));
     }
-    return out;
+
+    // Soft bone pull AFTER EMA so the seatbelt is not re-lagged.
+    return this.applyLegBoneSoftPull(out);
+  }
+
+  private anyFlipStreak(): boolean {
+    for (const v of this.lrFlipStreak.values()) {
+      if (v > 0) return true;
+    }
+    return false;
+  }
+
+  private observeLegBones(prepared: Map<number, JointLandmark>): void {
+    const hw = this.hipWidthFromMap(prepared);
+    const close = kneesClose([...prepared.values()]);
+    const flip = this.anyFlipStreak();
+    for (const [side, hipI, knI, anI] of [
+      ["left", 23, 25, 27],
+      ["right", 24, 26, 28],
+    ] as const) {
+      const hip = prepared.get(hipI);
+      const knee = prepared.get(knI);
+      const ankle = prepared.get(anI);
+      if (!hip || !knee || !ankle) continue;
+      this.legBones.observe(side, hip, knee, ankle, {
+        hipWidth: hw,
+        kneesClose: close,
+        flipStreakActive: flip,
+      });
+    }
+  }
+
+  private applyLegBoneSoftPull(landmarks: JointLandmark[]): JointLandmark[] {
+    const map = new Map(landmarks.map((l) => [l.index, { ...l }]));
+    const hw = this.hipWidthFromMap(map);
+    for (const [side, hipI, knI, anI] of [
+      ["left", 23, 25, 27],
+      ["right", 24, 26, 28],
+    ] as const) {
+      const hip = map.get(hipI);
+      const knee = map.get(knI);
+      const ankle = map.get(anI);
+      if (!hip || !knee) continue;
+      const kn = this.legBones.softPullKnee(side, hip, knee, hw);
+      knee.x = kn.x;
+      knee.y = kn.y;
+      if (ankle) {
+        const an = this.legBones.softPullAnkle(side, knee, ankle, hw);
+        ankle.x = an.x;
+        ankle.y = an.y;
+      }
+    }
+    return landmarks.map((l) => map.get(l.index) ?? l);
+  }
+
+  private hipWidthFromMap(
+    map: Map<number, { x: number; y: number }>,
+  ): number {
+    const l = map.get(23);
+    const r = map.get(24);
+    if (!l || !r) return this.hipWidth();
+    return Math.max(0.04, Math.hypot(l.x - r.x, l.y - r.y));
   }
 
   private dist2(
@@ -778,14 +853,14 @@ export class PerceptionEngine {
     }
 
     let alpha = this.baseAlphaForIndex(raw.index);
-    if (isLower) {
-      const step = Math.hypot(raw.x - prev.x, raw.y - prev.y);
-      const hw = this.hipWidth();
-      // 0 at rest → 1 at ~30% hip-width step: blend toward fast alpha
-      const motion = Math.min(1, step / (hw * 0.3));
-      const fast = raw.index >= 27 ? ALPHA_FAST_ANKLE : ALPHA_FAST_KNEE;
-      alpha = alpha + (fast - alpha) * motion;
-    }
+    const step = Math.hypot(raw.x - prev.x, raw.y - prev.y);
+    const hw = this.hipWidth();
+    // 0 at rest → 1 at ~30% hip-width step: blend toward fast alpha
+    const motion = Math.min(1, step / (hw * 0.3));
+    let fast = ALPHA_FAST_UPPER;
+    if (raw.index >= 27) fast = ALPHA_FAST_ANKLE;
+    else if (raw.index >= 23) fast = ALPHA_FAST_KNEE;
+    alpha = alpha + (fast - alpha) * motion;
 
     const next: SmoothedJoint = {
       x: prev.x + alpha * (raw.x - prev.x),
