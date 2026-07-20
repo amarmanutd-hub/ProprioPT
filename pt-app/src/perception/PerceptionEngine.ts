@@ -550,7 +550,7 @@ export class PerceptionEngine {
     // Undo left/right ID flips before EMA (smoothing alone can't fix identity swaps).
     this.stabilizeLaterality(byIndex);
 
-    // Pre-EMA: clamp + learn bone lengths from clear frames.
+    // Pre-EMA: clamp, repair far-knee collapse, learn bone lengths.
     const prepared = new Map<number, JointLandmark>();
     for (const idx of this.activeIndices()) {
       const raw = byIndex.get(idx);
@@ -558,6 +558,7 @@ export class PerceptionEngine {
       const gated = this.maybeMedianLowerBody(raw);
       prepared.set(idx, this.clampLowerJump(gated));
     }
+    this.repairKneeCollapse(prepared);
     this.observeLegBones(prepared);
 
     const out: JointLandmark[] = [];
@@ -601,24 +602,93 @@ export class PerceptionEngine {
   private applyLegBoneSoftPull(landmarks: JointLandmark[]): JointLandmark[] {
     const map = new Map(landmarks.map((l) => [l.index, { ...l }]));
     const hw = this.hipWidthFromMap(map);
-    for (const [side, hipI, knI, anI] of [
-      ["left", 23, 25, 27],
-      ["right", 24, 26, 28],
+    // Ankle-only seatbelt — thigh soft-pull fights foreshortening (knee "tip").
+    for (const [side, knI, anI] of [
+      ["left", 25, 27],
+      ["right", 26, 28],
     ] as const) {
-      const hip = map.get(hipI);
       const knee = map.get(knI);
       const ankle = map.get(anI);
-      if (!hip || !knee) continue;
-      const kn = this.legBones.softPullKnee(side, hip, knee, hw);
-      knee.x = kn.x;
-      knee.y = kn.y;
-      if (ankle) {
-        const an = this.legBones.softPullAnkle(side, knee, ankle, hw);
-        ankle.x = an.x;
-        ankle.y = an.y;
-      }
+      if (!knee || !ankle) continue;
+      const an = this.legBones.softPullAnkle(side, knee, ankle, hw);
+      ankle.x = an.x;
+      ankle.y = an.y;
     }
     return landmarks.map((l) => map.get(l.index) ?? l);
+  }
+
+  /**
+   * When MP collapses both knees onto one joint (far → near), reconstruct the
+   * victim from its hip using last direction or away-from-other-hip + thigh len.
+   */
+  private repairKneeCollapse(
+    prepared: Map<number, JointLandmark>,
+  ): void {
+    const lHip = prepared.get(23);
+    const rHip = prepared.get(24);
+    const lKn = prepared.get(25);
+    const rKn = prepared.get(26);
+    if (!lHip || !rHip || !lKn || !rKn) return;
+
+    const hw = this.hipWidthFromMap(prepared);
+    const sep = Math.hypot(lKn.x - rKn.x, lKn.y - rKn.y);
+    if (sep >= hw * 0.32) return;
+
+    const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y);
+
+    const lToOwn = dist(lKn, lHip);
+    const lToOther = dist(lKn, rHip);
+    const rToOwn = dist(rKn, rHip);
+    const rToOther = dist(rKn, lHip);
+    const prevL = this.smoothState.get(25);
+    const prevR = this.smoothState.get(26);
+
+    let fixLeft = false;
+    let fixRight = false;
+    if (prevL && prevR) {
+      const lJump = dist(lKn, prevL);
+      const rJump = dist(rKn, prevR);
+      if (lJump > rJump * 1.25 && lJump > hw * 0.08) fixLeft = true;
+      else if (rJump > lJump * 1.25 && rJump > hw * 0.08) fixRight = true;
+    }
+    if (!fixLeft && !fixRight) {
+      // Stuck together: victim is closer to the opposite hip.
+      if (lToOther / Math.max(lToOwn, 1e-6) < rToOther / Math.max(rToOwn, 1e-6)) {
+        fixLeft = true;
+      } else {
+        fixRight = true;
+      }
+    }
+
+    if (fixLeft) {
+      prepared.set(25, this.reconstructKnee("left", lHip, rHip, lKn, prevL, hw));
+    }
+    if (fixRight) {
+      prepared.set(26, this.reconstructKnee("right", rHip, lHip, rKn, prevR, hw));
+    }
+  }
+
+  private reconstructKnee(
+    side: "left" | "right",
+    ownHip: JointLandmark,
+    otherHip: JointLandmark,
+    rawKnee: JointLandmark,
+    prev: { x: number; y: number; visibility?: number } | undefined,
+    hipWidth: number,
+  ): JointLandmark {
+    const placed = this.legBones.reconstructKnee(
+      side,
+      ownHip,
+      otherHip,
+      prev,
+      hipWidth,
+    );
+    return {
+      ...rawKnee,
+      x: placed.x,
+      y: placed.y,
+    };
   }
 
   private hipWidthFromMap(

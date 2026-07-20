@@ -62,6 +62,43 @@ export class LegBonesTracker {
     return this.side(side).samples;
   }
 
+  /** Learned thigh length in image units, or null until frozen. */
+  thighLength(side: BoneSide, hipWidth: number): number | null {
+    const st = this.side(side);
+    if (!st.frozen || st.thighFrac <= 0) return null;
+    return st.thighFrac * Math.max(0.04, hipWidth);
+  }
+
+  /**
+   * Place knee at ownHip + dir * thighLen. Dir from last good knee, else away
+   * from otherHip. Used when MP collapses far knee onto near.
+   */
+  reconstructKnee(
+    side: BoneSide,
+    ownHip: BonePoint,
+    otherHip: BonePoint,
+    prevKnee: BonePoint | undefined,
+    hipWidth: number,
+  ): BonePoint {
+    const hw = Math.max(0.04, hipWidth);
+    const thighLen = this.thighLength(side, hw) ?? hw * 0.95;
+    let dx: number;
+    let dy: number;
+    if (prevKnee) {
+      dx = prevKnee.x - ownHip.x;
+      dy = prevKnee.y - ownHip.y;
+    } else {
+      dx = ownHip.x - otherHip.x;
+      dy = ownHip.y - otherHip.y;
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    return {
+      x: ownHip.x + (dx / len) * thighLen,
+      y: ownHip.y + (dy / len) * thighLen,
+      visibility: prevKnee?.visibility,
+    };
+  }
+
   /**
    * Learn lengths when clear. Skip on kneesClose, flip streak, low vis, or bad scale.
    */

@@ -149,7 +149,7 @@ export class SlrMove implements ExerciseMove {
     const lowered = hip >= this.baselineHip - 10;
     if (lowered) {
       const lift = this.baselineHip - this.peakHipFlex;
-      if (lift < 14) {
+      if (lift < 12) {
         flags.push("incompleteHeight");
         this.onFlag?.(
           "incompleteHeight",

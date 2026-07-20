@@ -133,4 +133,24 @@ describe("LegBonesTracker", () => {
     expect(t.isFrozen("left")).toBe(false);
     expect(t.samples("left")).toBe(0);
   });
+
+  it("reconstructKnee places along last direction at thigh length", () => {
+    const t = new LegBonesTracker();
+    train(t);
+    const ownHip = pt(0, 0);
+    const otherHip = pt(1, 0);
+    const prev = pt(0, 1); // straight down
+    const out = t.reconstructKnee("left", ownHip, otherHip, prev, 1);
+    expect(out.x).toBeCloseTo(0, 5);
+    expect(out.y).toBeCloseTo(t.thighLength("left", 1)!, 5);
+  });
+
+  it("reconstructKnee falls back away from other hip", () => {
+    const t = new LegBonesTracker();
+    const ownHip = pt(0, 0);
+    const otherHip = pt(1, 0);
+    const out = t.reconstructKnee("left", ownHip, otherHip, undefined, 1);
+    expect(out.x).toBeLessThan(0);
+    expect(Math.hypot(out.x - ownHip.x, out.y - ownHip.y)).toBeCloseTo(0.95, 5);
+  });
 });

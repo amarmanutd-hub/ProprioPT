@@ -233,6 +233,9 @@ const privacyQueue = new PrivacyFrameQueue();
 let privacyTick = 0;
 let lastCalibSpeechKey = "";
 let pack: PackSession | null = null;
+/** Keep form banners visible briefly after flags clear (SLR incomplete/bent). */
+let formCueHoldUntil = 0;
+const FORM_CUE_HOLD_MS = 1600;
 /** After initial standing calib in pack mode, we drive PackSession. */
 let packReady = false;
 
@@ -399,6 +402,7 @@ function showPackSetup(): void {
     packChipMode.dataset.kind = formCoached ? "form" : "count";
   }
   ui.dismissFormCue();
+  formCueHoldUntil = 0;
   squatStateEl.textContent = move.title;
   setStatus(
     `${move.setup.copy} · Move ${pack.getIndex() + 1} of 5 · ${modeLabel}`,
@@ -419,6 +423,7 @@ function mapPackFlag(kind: string): CompensationKind {
 function onPackFormFlag(kind: string, detail: string): void {
   pack?.recordFormEvent(kind);
   ui.flashViolation(mapPackFlag(kind), detail);
+  formCueHoldUntil = performance.now() + FORM_CUE_HOLD_MS;
 }
 
 function onPackRep(n: number): void {
@@ -668,7 +673,8 @@ const engine = new PerceptionEngine({
         if (
           phaseNow === "work" &&
           !(active instanceof SquatMove) &&
-          pack!.getLiveFlags().length === 0
+          pack!.getLiveFlags().length === 0 &&
+          performance.now() >= formCueHoldUntil
         ) {
           ui.dismissFormCue();
         }
