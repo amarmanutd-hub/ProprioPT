@@ -146,7 +146,10 @@ export class HeelSlideMove implements ExerciseMove {
     const silence = track.level === "weak" || picked.kneesClose;
 
     if (silence) {
-      this.markDirtyIfActive();
+      // Weak track = unreliable angles → discard cycle. Knee overlap alone is
+      // common on diagonal heel slides; freeze-lock keeps identity, so silence
+      // the ° display but still allow a clean cycle to count.
+      if (track.level === "weak") this.markDirtyIfActive();
       const reason =
         track.level === "weak"
           ? track.reason

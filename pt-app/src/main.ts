@@ -310,7 +310,10 @@ function landmarkToCanvas(
   return { x: lm.x * drawW + offsetX, y: lm.y * drawH + offsetY };
 }
 
-const SKIP_GUIDE_INDICES = new Set([17, 18, 19, 20, 21, 22]);
+const SKIP_GUIDE_INDICES = new Set([
+  17, 18, 19, 20, 21, 22, // hands
+  29, 30, 31, 32, // heel / foot tip — noisier than ankle; hide to cut jitter
+]);
 
 function drawGuide(landmarks: JointLandmark[]): void {
   syncGuideSize();
@@ -323,10 +326,12 @@ function drawGuide(landmarks: JointLandmark[]): void {
 
   for (const lm of landmarks) {
     if (SKIP_GUIDE_INDICES.has(lm.index)) continue;
-    if (lm.visibility < 0.2) continue;
+    // Ankles need higher confidence; weak dots look like teleporting feet.
+    const minVis = lm.index >= 27 ? 0.4 : 0.25;
+    if (lm.visibility < minVis) continue;
     const { x, y } = landmarkToCanvas(lm, vw, vh, guide.width, guide.height);
     guideCtx.beginPath();
-    guideCtx.arc(x, y, 8, 0, Math.PI * 2);
+    guideCtx.arc(x, y, lm.index >= 23 ? 7 : 8, 0, Math.PI * 2);
     guideCtx.fillStyle = "#8faf7a";
     guideCtx.fill();
     guideCtx.strokeStyle = "#fff";
@@ -393,6 +398,7 @@ function showPackSetup(): void {
     packChipMode.textContent = modeLabel;
     packChipMode.dataset.kind = formCoached ? "form" : "count";
   }
+  ui.dismissFormCue();
   squatStateEl.textContent = move.title;
   setStatus(
     `${move.setup.copy} · Move ${pack.getIndex() + 1} of 5 · ${modeLabel}`,
@@ -658,6 +664,14 @@ const engine = new PerceptionEngine({
 
         squatStateEl.textContent = hint.phaseLabel;
         repCounterEl.textContent = String(pack!.getLiveReps());
+
+        if (
+          phaseNow === "work" &&
+          !(active instanceof SquatMove) &&
+          pack!.getLiveFlags().length === 0
+        ) {
+          ui.dismissFormCue();
+        }
 
         if (active instanceof SquatMove && phaseNow === "work") {
           const last = active.getLastResult();

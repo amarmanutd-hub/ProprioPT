@@ -97,21 +97,26 @@ const LR_PAIRS: ReadonlyArray<readonly [number, number]> = [
   [31, 32],
 ];
 
-/** Swap must beat keep by this factor before we treat it as an ID flip. */
-const LR_FLIP_RATIO = 0.85;
+/** Swap must beat keep clearly — was 0.85 (thrashy on diagonal overlap). */
+const LR_FLIP_RATIO = 0.72;
+/** Require this many consecutive swap-favoring frames before committing. */
+const LR_FLIP_STREAK = 2;
 
-/** EMA blend toward raw — base rates; motion boosts these toward ALPHA_FAST. */
-const ALPHA_UPPER = 0.5;
-const ALPHA_HIP = 0.4;
-const ALPHA_LEG = 0.38;
-const ALPHA_FAST = 0.92; // intentional movement — nearly raw
+/** EMA blend toward raw — base rates; motion boosts toward ALPHA_FAST*. */
+const ALPHA_UPPER = 0.45;
+const ALPHA_HIP = 0.35;
+const ALPHA_KNEE = 0.3;
+const ALPHA_ANKLE = 0.2;
+const ALPHA_FAST_KNEE = 0.72;
+const ALPHA_FAST_ANKLE = 0.48;
 const VIS_HOLD_LOWER = 0.35;
 const LOWER_MEDIAN_N = 3;
 /** Only median when nearly still (fraction of hip width). */
-const MEDIAN_STILL_FRAC = 0.08;
+const MEDIAN_STILL_FRAC = 0.12;
 /** Clamp only true teleports (L/R flip residue), not normal bends. */
 const MAX_STEP_HIP = 1.4;
-const MAX_STEP_LEG = 1.25;
+const MAX_STEP_LEG = 1.1;
+const MAX_STEP_ANKLE = 0.9;
 
 interface SmoothedJoint {
   x: number;
@@ -155,6 +160,8 @@ export class PerceptionEngine {
   private smoothState = new Map<number, SmoothedJoint>();
   /** Short history for lower-body median (kills single-frame L/R spikes). */
   private lowerHistory = new Map<number, SmoothedJoint[]>();
+  /** Consecutive frames where swap beats keep, per L/R pair key. */
+  private lrFlipStreak = new Map<string, number>();
 
   constructor(options: PerceptionEngineOptions) {
     this.video = options.video;
@@ -275,6 +282,7 @@ export class PerceptionEngine {
     this.lastInferMs = 0;
     this.smoothState.clear();
     this.lowerHistory.clear();
+    this.lrFlipStreak.clear();
     this.loop();
   }
 
@@ -289,6 +297,7 @@ export class PerceptionEngine {
     this.lightingScratch = null;
     this.smoothState.clear();
     this.lowerHistory.clear();
+    this.lrFlipStreak.clear();
     this.alerts.onHalt?.("user", "Perception stopped.");
   }
 
@@ -569,14 +578,20 @@ export class PerceptionEngine {
       const prevR = this.smoothState.get(rightIdx);
       if (!prevL || !prevR) continue;
 
-      const keep =
-        this.dist2(curL, prevL) + this.dist2(curR, prevR);
-      const swap =
-        this.dist2(curL, prevR) + this.dist2(curR, prevL);
+      const keep = this.dist2(curL, prevL) + this.dist2(curR, prevR);
+      const swap = this.dist2(curL, prevR) + this.dist2(curR, prevL);
+      const key = `${leftIdx}-${rightIdx}`;
 
       if (swap < keep * LR_FLIP_RATIO) {
-        byIndex.set(leftIdx, { ...curR, index: leftIdx });
-        byIndex.set(rightIdx, { ...curL, index: rightIdx });
+        const streak = (this.lrFlipStreak.get(key) ?? 0) + 1;
+        this.lrFlipStreak.set(key, streak);
+        if (streak >= LR_FLIP_STREAK) {
+          byIndex.set(leftIdx, { ...curR, index: leftIdx });
+          byIndex.set(rightIdx, { ...curL, index: rightIdx });
+          this.lrFlipStreak.set(key, 0);
+        }
+      } else {
+        this.lrFlipStreak.set(key, 0);
       }
     }
 
@@ -705,8 +720,13 @@ export class PerceptionEngine {
     const prev = this.smoothState.get(raw.index);
     if (!prev) return raw;
 
-    const maxStep =
-      this.hipWidth() * (raw.index >= 25 ? MAX_STEP_LEG : MAX_STEP_HIP);
+    const maxFrac =
+      raw.index >= 27
+        ? MAX_STEP_ANKLE
+        : raw.index >= 25
+          ? MAX_STEP_LEG
+          : MAX_STEP_HIP;
+    const maxStep = this.hipWidth() * maxFrac;
     const dx = raw.x - prev.x;
     const dy = raw.y - prev.y;
     const dist = Math.hypot(dx, dy);
@@ -725,7 +745,8 @@ export class PerceptionEngine {
   }
 
   private baseAlphaForIndex(index: number): number {
-    if (index >= 25) return ALPHA_LEG;
+    if (index >= 27) return ALPHA_ANKLE;
+    if (index >= 25) return ALPHA_KNEE;
     if (index >= 23) return ALPHA_HIP;
     return ALPHA_UPPER;
   }
@@ -760,9 +781,10 @@ export class PerceptionEngine {
     if (isLower) {
       const step = Math.hypot(raw.x - prev.x, raw.y - prev.y);
       const hw = this.hipWidth();
-      // 0 at rest → 1 at ~25% hip-width step: blend toward ALPHA_FAST
-      const motion = Math.min(1, step / (hw * 0.25));
-      alpha = alpha + (ALPHA_FAST - alpha) * motion;
+      // 0 at rest → 1 at ~30% hip-width step: blend toward fast alpha
+      const motion = Math.min(1, step / (hw * 0.3));
+      const fast = raw.index >= 27 ? ALPHA_FAST_ANKLE : ALPHA_FAST_KNEE;
+      alpha = alpha + (fast - alpha) * motion;
     }
 
     const next: SmoothedJoint = {

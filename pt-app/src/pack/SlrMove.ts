@@ -39,6 +39,8 @@ export class SlrMove implements ExerciseMove {
   private baselineHip = 160;
   private peakHipFlex = 180;
   private bentLogged = false;
+  /** True if knee bent during this lift — cue only used to refuse the count. */
+  private bentThisRep = false;
   private setComplete = false;
   private locked: LockedKnee | null = null;
   private lastKneePos: KneePos | null = null;
@@ -56,6 +58,7 @@ export class SlrMove implements ExerciseMove {
     this.baselineHip = 160;
     this.peakHipFlex = 180;
     this.bentLogged = false;
+    this.bentThisRep = false;
     this.setComplete = false;
     this.locked = null;
     this.lastKneePos = null;
@@ -115,6 +118,7 @@ export class SlrMove implements ExerciseMove {
     // Quad lag: knee bends while intending a straight-leg raise
     if (this.phase === "up" && knee < 150) {
       flags.push("bentKnee");
+      this.bentThisRep = true;
       if (!this.bentLogged) {
         this.bentLogged = true;
         this.onFlag?.(
@@ -129,6 +133,7 @@ export class SlrMove implements ExerciseMove {
         this.phase = "up";
         this.peakHipFlex = hip;
         this.bentLogged = false;
+        this.bentThisRep = false;
       }
       return {
         reps: this.reps,
@@ -150,6 +155,12 @@ export class SlrMove implements ExerciseMove {
           "incompleteHeight",
           "Lift a bit higher — about a foot off the floor.",
         );
+      } else if (this.bentThisRep) {
+        flags.push("bentKnee");
+        this.onFlag?.(
+          "bentKnee",
+          "That rep didn’t count — keep the knee straight next time.",
+        );
       } else {
         this.reps += 1;
         this.onRep?.(this.reps);
@@ -158,6 +169,7 @@ export class SlrMove implements ExerciseMove {
       this.phase = "down";
       this.peakHipFlex = 180;
       this.bentLogged = false;
+      this.bentThisRep = false;
     }
 
     return {

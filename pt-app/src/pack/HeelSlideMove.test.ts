@@ -207,7 +207,7 @@ describe("HeelSlideMove", () => {
     expect(r.track).toBe("weak");
   });
 
-  it("does not count a rep if silence fired mid-rep", () => {
+  it("still counts when knees overlap mid-rep if lock is held", () => {
     const onRep = vi.fn();
     const move = new HeelSlideMove({ targetReps: 2, onRep });
     let t = 1000;
@@ -227,7 +227,38 @@ describe("HeelSlideMove", () => {
       lmAt(27, 0.5, 0.7),
       lmAt(28, 0.51, 0.7),
     ];
-    move.update(overlap, sample(120, t), t);
+    const silenced = move.update(overlap, sample(120, t), t);
+    expect(silenced.displayKneeDeg).toBeNull();
+    t += 33;
+    for (const k of [130, 140, 150, 158, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    expect(onRep).toHaveBeenCalledWith(1);
+  });
+
+  it("does not count a rep if track goes weak mid-rep", () => {
+    const onRep = vi.fn();
+    const move = new HeelSlideMove({ targetReps: 2, onRep, side: "right" });
+    let t = 1000;
+    for (const k of [165, 164, 163, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    for (const k of [150, 140, 130, 120]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    // Prescribed right chain barely visible → weak → dirty
+    const weak = [
+      lmAt(23, 0.35, 0.4, 0.9),
+      lmAt(24, 0.55, 0.4, 0.05),
+      lmAt(25, 0.35, 0.55, 0.9),
+      lmAt(26, 0.55, 0.55, 0.05),
+      lmAt(27, 0.35, 0.7, 0.9),
+      lmAt(28, 0.55, 0.7, 0.05),
+    ];
+    move.update(weak, sample(120, t), t);
     t += 33;
     for (const k of [130, 140, 150, 158, 162]) {
       move.update(separatedLegs(), sample(k, t), t);

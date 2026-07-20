@@ -75,6 +75,25 @@ describe("SlrMove", () => {
     expect(r.flags).toContain("bentKnee");
     expect(onFlag).toHaveBeenCalledWith("bentKnee", expect.stringContaining("straight"));
   });
+
+  it("does not count a lift that bent the knee", () => {
+    const onRep = vi.fn();
+    const onFlag = vi.fn();
+    const move = new SlrMove({ targetReps: 5, onRep, onFlag });
+    let t = 1000;
+    move.update(legs(), sample(168, t, 165), t);
+    t += 33;
+    move.update(legs(), sample(168, t, 140), t);
+    t += 33;
+    move.update(legs(), sample(130, t, 120), t); // bent mid-lift
+    t += 33;
+    move.update(legs(), sample(160, t, 160), t); // lower
+    expect(onRep).not.toHaveBeenCalled();
+    expect(onFlag).toHaveBeenCalledWith(
+      "bentKnee",
+      expect.stringContaining("didn’t count"),
+    );
+  });
 });
 
 describe("GluteBridgeMove", () => {

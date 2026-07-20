@@ -71,6 +71,12 @@ export class PTAppUIEngine {
     this.violationActive = false;
   }
 
+  /** Drop a pack form cue when the move changes or flags clear. */
+  dismissFormCue(): void {
+    this.clearBanner();
+    this.violationActive = false;
+  }
+
   /**
    * Paint knee halo from squat frame. Hides stick-figure dots.
    * Clears violation banner the instant flags are gone.
