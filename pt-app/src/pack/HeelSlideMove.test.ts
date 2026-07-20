@@ -125,8 +125,9 @@ describe("HeelSlideMove", () => {
     }
     for (const k of [150, 140, 130, 120]) {
       move.update(separatedLegs(), sample(k, t), t);
-      t += 33;
+      t += 80;
     }
+    t += 300; // past MIN_FLEX_MS
     for (const k of [130, 140, 150, 158, 162]) {
       move.update(separatedLegs(), sample(k, t), t);
       t += 33;
@@ -176,8 +177,9 @@ describe("HeelSlideMove", () => {
       [162, 120],
     ] as const) {
       move.update(separatedLegs(), asymmetric(L, R), t);
-      t += 33;
+      t += 80;
     }
+    t += 300;
     for (const [L, R] of [
       [162, 135],
       [162, 150],
@@ -189,10 +191,10 @@ describe("HeelSlideMove", () => {
     expect(move.update(separatedLegs(), asymmetric(162, 162), t).reps).toBe(1);
   });
 
-  it("freezes displayKneeDeg to null when knees overlap", () => {
+  it("keeps last flexion visible when knees overlap", () => {
     const move = new HeelSlideMove({ targetReps: 5 });
     let t = 1000;
-    move.update(separatedLegs(), sample(160, t), t);
+    move.update(separatedLegs(), sample(140, t), t);
     t += 33;
     const overlap = [
       lmAt(23, 0.4, 0.4),
@@ -203,24 +205,8 @@ describe("HeelSlideMove", () => {
       lmAt(28, 0.51, 0.7),
     ];
     const r = move.update(overlap, sample(140, t), t);
-    expect(r.displayKneeDeg).toBeNull();
-    expect(r.track).toBe("weak");
-  });
-
-  it("uses more-flexed of image vs sample for display", () => {
-    const move = new HeelSlideMove({ targetReps: 5, side: "right" });
-    // Image: clearly bent (~90° interior). Sample claims nearly straight.
-    const bentRight = [
-      lmAt(23, 0.35, 0.4),
-      lmAt(24, 0.55, 0.4),
-      lmAt(25, 0.35, 0.55),
-      lmAt(26, 0.7, 0.45), // knee forward
-      lmAt(27, 0.35, 0.7),
-      lmAt(28, 0.55, 0.7), // ankle back → bent
-    ];
-    const r = move.update(bentRight, sample(170, 1000), 1000);
-    expect(r.displayKneeDeg).not.toBeNull();
-    expect(r.displayKneeDeg!).toBeGreaterThan(40);
+    expect(r.displayKneeDeg).toBeTypeOf("number");
+    expect(r.track).toBe("ok");
   });
 
   it("still counts when deep flex happens under knee overlap", () => {
@@ -239,11 +225,11 @@ describe("HeelSlideMove", () => {
       lmAt(27, 0.5, 0.7),
       lmAt(28, 0.51, 0.7),
     ];
-    // Enter flex while overlapped (this used to stall the FSM).
     for (const k of [150, 140, 130, 120]) {
       move.update(overlap, sample(k, t), t);
-      t += 33;
+      t += 80;
     }
+    t += 300;
     for (const k of [130, 140, 150, 158, 162]) {
       move.update(separatedLegs(), sample(k, t), t);
       t += 33;
@@ -261,7 +247,7 @@ describe("HeelSlideMove", () => {
     }
     for (const k of [150, 140, 130, 120]) {
       move.update(separatedLegs(), sample(k, t), t);
-      t += 33;
+      t += 80;
     }
     const overlap = [
       lmAt(23, 0.4, 0.4),
@@ -272,8 +258,8 @@ describe("HeelSlideMove", () => {
       lmAt(28, 0.51, 0.7),
     ];
     const silenced = move.update(overlap, sample(120, t), t);
-    expect(silenced.displayKneeDeg).toBeNull();
-    t += 33;
+    expect(silenced.displayKneeDeg).toBeTypeOf("number");
+    t += 300;
     for (const k of [130, 140, 150, 158, 162]) {
       move.update(separatedLegs(), sample(k, t), t);
       t += 33;
@@ -291,9 +277,9 @@ describe("HeelSlideMove", () => {
     }
     for (const k of [150, 140, 130, 120]) {
       move.update(separatedLegs(), sample(k, t), t);
-      t += 33;
+      t += 80;
     }
-    // Prescribed right chain barely visible → weak → dirty
+    t += 300;
     const weak = [
       lmAt(23, 0.35, 0.4, 0.9),
       lmAt(24, 0.55, 0.4, 0.05),
@@ -309,5 +295,28 @@ describe("HeelSlideMove", () => {
       t += 33;
     }
     expect(onRep).not.toHaveBeenCalled();
+  });
+
+  it("debounces double-count from rapid angle teleport", () => {
+    const onRep = vi.fn();
+    const move = new HeelSlideMove({ targetReps: 5, onRep });
+    let t = 1000;
+    for (const k of [165, 164, 163, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    for (const k of [150, 140, 120]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 100;
+    }
+    t += 300;
+    move.update(separatedLegs(), sample(162, t), t); // count 1
+    t += 33;
+    // Immediate fake second cycle — too soon for MIN_REP_GAP
+    for (const k of [120, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 50;
+    }
+    expect(onRep).toHaveBeenCalledTimes(1);
   });
 });

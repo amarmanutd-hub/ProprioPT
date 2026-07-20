@@ -458,6 +458,10 @@ function startPackSession(): void {
     onOrientation: (policy) => engine.setOrientationPolicy(policy),
   });
   packReady = true;
+  // Protect idle knee from collapsing onto the working (prescribed) side.
+  if (clinicalLimits.side === "right") engine.setProtectIdleSide("left");
+  else if (clinicalLimits.side === "left") engine.setProtectIdleSide("right");
+  else engine.setProtectIdleSide(null);
   pack.beginSetup();
   showPackSetup();
   showLimitsChip();

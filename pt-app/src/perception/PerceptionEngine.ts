@@ -167,6 +167,13 @@ export class PerceptionEngine {
   private lrFlipStreak = new Map<string, number>();
   /** Soft bone-length seatbelt (hipWidth-normalized). */
   private readonly legBones = new LegBonesTracker();
+  /**
+   * When clinical side is set, keep the opposite (idle) knee from collapsing
+   * onto the working knee for this many frames after a repair.
+   */
+  private protectIdle: "left" | "right" | null = null;
+  private idleHoldFrames = 0;
+  private idleHeld: JointLandmark | null = null;
 
   constructor(options: PerceptionEngineOptions) {
     this.video = options.video;
@@ -201,6 +208,18 @@ export class PerceptionEngine {
 
   getOrientationPolicy(): OrientationPolicy {
     return this.orientationPolicy;
+  }
+
+  /**
+   * Protect the non-working knee from MP collapse onto the working limb.
+   * Pass the idle side (e.g. "left" when PT prescribed right).
+   */
+  setProtectIdleSide(side: "left" | "right" | null): void {
+    this.protectIdle = side;
+    if (!side) {
+      this.idleHoldFrames = 0;
+      this.idleHeld = null;
+    }
   }
 
   static probeCapabilities(): RuntimeCapabilities {
@@ -289,6 +308,8 @@ export class PerceptionEngine {
     this.lowerHistory.clear();
     this.lrFlipStreak.clear();
     this.legBones.reset();
+    this.idleHoldFrames = 0;
+    this.idleHeld = null;
     this.loop();
   }
 
@@ -305,6 +326,8 @@ export class PerceptionEngine {
     this.lowerHistory.clear();
     this.lrFlipStreak.clear();
     this.legBones.reset();
+    this.idleHoldFrames = 0;
+    this.idleHeld = null;
     this.alerts.onHalt?.("user", "Perception stopped.");
   }
 
@@ -619,7 +642,8 @@ export class PerceptionEngine {
 
   /**
    * When MP collapses both knees onto one joint (far → near), reconstruct the
-   * victim from its hip using last direction or away-from-other-hip + thigh len.
+   * victim from its hip. Sticky-hold the protected idle side so it doesn't
+   * flicker back onto the working knee for several frames.
    */
   private repairKneeCollapse(
     prepared: Map<number, JointLandmark>,
@@ -632,10 +656,26 @@ export class PerceptionEngine {
 
     const hw = this.hipWidthFromMap(prepared);
     const sep = Math.hypot(lKn.x - rKn.x, lKn.y - rKn.y);
-    if (sep >= hw * 0.32) return;
-
     const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
       Math.hypot(a.x - b.x, a.y - b.y);
+
+    // Sticky hold: keep idle knee parked until clearly separated again.
+    if (this.protectIdle && this.idleHoldFrames > 0 && this.idleHeld) {
+      if (sep < hw * 0.5) {
+        const idx = this.protectIdle === "left" ? 25 : 26;
+        prepared.set(idx, {
+          ...this.idleHeld,
+          index: idx,
+          visibility: (this.protectIdle === "left" ? lKn : rKn).visibility,
+        });
+        this.idleHoldFrames -= 1;
+        return;
+      }
+      this.idleHoldFrames = 0;
+      this.idleHeld = null;
+    }
+
+    if (sep >= hw * 0.4) return;
 
     const lToOwn = dist(lKn, lHip);
     const lToOther = dist(lKn, rHip);
@@ -649,11 +689,10 @@ export class PerceptionEngine {
     if (prevL && prevR) {
       const lJump = dist(lKn, prevL);
       const rJump = dist(rKn, prevR);
-      if (lJump > rJump * 1.25 && lJump > hw * 0.08) fixLeft = true;
-      else if (rJump > lJump * 1.25 && rJump > hw * 0.08) fixRight = true;
+      if (lJump > rJump * 1.15 && lJump > hw * 0.06) fixLeft = true;
+      else if (rJump > lJump * 1.15 && rJump > hw * 0.06) fixRight = true;
     }
     if (!fixLeft && !fixRight) {
-      // Stuck together: victim is closer to the opposite hip.
       if (lToOther / Math.max(lToOwn, 1e-6) < rToOther / Math.max(rToOwn, 1e-6)) {
         fixLeft = true;
       } else {
@@ -661,11 +700,35 @@ export class PerceptionEngine {
       }
     }
 
+    // Prefer repairing the protected idle side when both are ambiguous.
+    if (this.protectIdle === "left" && fixRight && !fixLeft && sep < hw * 0.28) {
+      fixLeft = true;
+      fixRight = false;
+    } else if (
+      this.protectIdle === "right" &&
+      fixLeft &&
+      !fixRight &&
+      sep < hw * 0.28
+    ) {
+      fixRight = true;
+      fixLeft = false;
+    }
+
     if (fixLeft) {
-      prepared.set(25, this.reconstructKnee("left", lHip, rHip, lKn, prevL, hw));
+      const fixed = this.reconstructKnee("left", lHip, rHip, lKn, prevL, hw);
+      prepared.set(25, fixed);
+      if (this.protectIdle === "left") {
+        this.idleHeld = fixed;
+        this.idleHoldFrames = 12;
+      }
     }
     if (fixRight) {
-      prepared.set(26, this.reconstructKnee("right", rHip, lHip, rKn, prevR, hw));
+      const fixed = this.reconstructKnee("right", rHip, lHip, rKn, prevR, hw);
+      prepared.set(26, fixed);
+      if (this.protectIdle === "right") {
+        this.idleHeld = fixed;
+        this.idleHoldFrames = 12;
+      }
     }
   }
 

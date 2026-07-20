@@ -2,11 +2,12 @@
  * Straight leg raise — form-coached (bent knee / quad lag, incomplete height).
  * Working-limb lock via screen-space continuity (same as heel slides).
  *
- * Rep = hip leaves floor baseline → stays up briefly → returns. Ankle image-Y
- * is NOT used for enter/count (too noisy on diagonal → instant false reps).
+ * Display uses clinical flexion (0≈straight). Mild angle noise (~160 interior)
+ * must not refuse counts — only a clearly bent knee does.
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
+import { imageKneeInteriorDeg } from "../biomechanics/BiomechanicalEvaluator";
 import type { JointLandmark } from "../perception/PerceptionEngine";
 import { assessTrack } from "../tracking/TrackConfidence";
 import {
@@ -16,13 +17,14 @@ import {
   type WorkingSide,
 } from "../tracking/workingLimb";
 import type { ExerciseMove, MoveDosing, MoveSetup, MoveUpdateResult } from "./types";
+import { toFlexionDeg } from "./HeelSlideMove";
 
-const BENT_KNEE = 135;
-const BENT_STREAK = 4;
-const HIP_ENTER = 14;
-const HIP_MIN_LIFT = 10;
-/** Must remain in the lift phase at least this long before a count. */
-const MIN_UP_MS = 450;
+/** Refuse count only when clearly bent (interior). 160° noise is fine. */
+const BENT_REFUSE = 120;
+const BENT_STREAK = 6;
+const HIP_ENTER = 12;
+const HIP_MIN_LIFT = 9;
+const MIN_UP_MS = 400;
 
 export interface SlrMoveOptions {
   targetReps?: number;
@@ -99,6 +101,7 @@ export class SlrMove implements ExerciseMove {
         phaseLabel: "Set complete",
         setComplete: true,
         track: "ok",
+        displayKneeDeg: null,
       };
     }
 
@@ -110,6 +113,7 @@ export class SlrMove implements ExerciseMove {
         setComplete: false,
         track: "lost",
         trackReason: track.reason,
+        displayKneeDeg: null,
       };
     }
 
@@ -127,17 +131,22 @@ export class SlrMove implements ExerciseMove {
     if (picked.pos) this.lastKneePos = picked.pos;
 
     const hip = picked.hip;
-    const knee = picked.knee;
+    const imgKnee =
+      picked.lock != null
+        ? imageKneeInteriorDeg(landmarks, picked.lock)
+        : null;
+    const knee = imgKnee != null ? Math.min(imgKnee, picked.knee) : picked.knee;
     const flags: string[] = [];
     const label = (ok: string) =>
       track.level === "weak" ? track.reason : ok;
+    const flexDisp = toFlexionDeg(knee);
 
     if (this.phase === "down" && hip > 120) {
       this.baselineHip = this.baselineHip * 0.9 + hip * 0.1;
     }
 
     if (this.phase === "up") {
-      if (knee < BENT_KNEE) {
+      if (knee < BENT_REFUSE) {
         this.bentStreak += 1;
         if (this.bentStreak >= BENT_STREAK) {
           flags.push("bentKnee");
@@ -175,6 +184,7 @@ export class SlrMove implements ExerciseMove {
         setComplete: false,
         track: track.level,
         trackReason: track.reason,
+        displayKneeDeg: flexDisp,
       };
     }
 
@@ -231,6 +241,7 @@ export class SlrMove implements ExerciseMove {
       setComplete: this.setComplete,
       track: track.level,
       trackReason: track.reason,
+      displayKneeDeg: this.setComplete ? null : flexDisp,
     };
   }
 }
