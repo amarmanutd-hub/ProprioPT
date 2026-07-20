@@ -1,9 +1,9 @@
 /**
- * Straight leg raise — form-coached (bent knee / quad lag, incomplete height).
- * Working-limb lock via screen-space continuity (same as heel slides).
+ * Straight leg raise — form-coached (bent knee / incomplete height).
  *
- * Display uses clinical flexion (0≈straight). Mild angle noise (~160 interior)
- * must not refuse counts — only a clearly bent knee does.
+ * Primary signal: 2D leg elevation (hip→ankle vs resting baseline), not noisy
+ * 3D hip joint angles. Matches MediaPipe SLR / FMS practice: track how far the
+ * working ankle rises, then returns. Knee bend is warn-only unless extreme.
  */
 
 import type { BiomechanicalSample } from "../biomechanics/BiomechanicalEvaluator";
@@ -19,18 +19,44 @@ import {
 import type { ExerciseMove, MoveDosing, MoveSetup, MoveUpdateResult } from "./types";
 import { toFlexionDeg } from "./HeelSlideMove";
 
-/** Refuse count only when clearly bent (interior). 160° noise is fine. */
-const BENT_REFUSE = 120;
-const BENT_STREAK = 6;
-const HIP_ENTER = 12;
-const HIP_MIN_LIFT = 9;
-const MIN_UP_MS = 400;
+/** Extreme bend only (interior °) — mild ~160° noise must not refuse. */
+const BENT_REFUSE = 115;
+const BENT_STREAK = 8;
+/** Elevation degrees above baseline to enter / count. */
+const ELEV_ENTER = 12;
+const ELEV_MIN = 10;
+const ELEV_RETURN = 5;
+const MIN_UP_MS = 350;
+const MIN_REP_GAP_MS = 800;
 
 export interface SlrMoveOptions {
   targetReps?: number;
   side?: WorkingSide;
   onFlag?: (kind: string, detail: string) => void;
   onRep?: (repIndex: number) => void;
+}
+
+function lmAt(
+  landmarks: JointLandmark[],
+  index: number,
+): JointLandmark | undefined {
+  return landmarks.find((p) => p.index === index && (p.visibility ?? 0) >= 0.25);
+}
+
+/**
+ * Elevation of hip→ankle above the resting floor direction (degrees).
+ * 0 ≈ leg on floor along baseline; ↑ as ankle rises toward camera-top.
+ */
+function legElevationDeg(
+  hip: { x: number; y: number },
+  ankle: { x: number; y: number },
+  baseAngleRad: number,
+): number {
+  const ang = Math.atan2(hip.y - ankle.y, ankle.x - hip.x);
+  let d = ((ang - baseAngleRad) * 180) / Math.PI;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return Math.abs(d);
 }
 
 export class SlrMove implements ExerciseMove {
@@ -51,16 +77,18 @@ export class SlrMove implements ExerciseMove {
 
   private reps = 0;
   private phase: "down" | "up" = "down";
-  private baselineHip = 160;
-  private peakHipFlex = 180;
+  private baseAngleRad = 0;
+  private baselineReady = false;
+  private baselineSamples = 0;
+  private peakElev = 0;
   private bentLogged = false;
   private bentThisRep = false;
   private bentStreak = 0;
   private setComplete = false;
   private locked: LockedKnee | null = null;
   private lastKneePos: KneePos | null = null;
-  private hipSign: 1 | -1 | null = null;
   private upSinceMs = 0;
+  private lastRepAt = 0;
 
   constructor(options: SlrMoveOptions = {}) {
     this.targetReps = options.targetReps ?? 10;
@@ -74,8 +102,10 @@ export class SlrMove implements ExerciseMove {
   reset(): void {
     this.reps = 0;
     this.phase = "down";
-    this.baselineHip = 160;
-    this.peakHipFlex = 180;
+    this.baseAngleRad = 0;
+    this.baselineReady = false;
+    this.baselineSamples = 0;
+    this.peakElev = 0;
     this.bentLogged = false;
     this.bentThisRep = false;
     this.bentStreak = 0;
@@ -83,8 +113,8 @@ export class SlrMove implements ExerciseMove {
     this.locked =
       this.side === "left" || this.side === "right" ? this.side : null;
     this.lastKneePos = null;
-    this.hipSign = null;
     this.upSinceMs = 0;
+    this.lastRepAt = 0;
   }
 
   update(
@@ -127,23 +157,52 @@ export class SlrMove implements ExerciseMove {
       sample.angles.leftHip,
       sample.angles.rightHip,
     );
-    if (picked.lock) this.locked = picked.lock;
+    if (this.side === "left" || this.side === "right") {
+      this.locked = this.side;
+    } else if (picked.lock) {
+      this.locked = picked.lock;
+    }
     if (picked.pos) this.lastKneePos = picked.pos;
 
-    const hip = picked.hip;
-    const imgKnee =
-      picked.lock != null
-        ? imageKneeInteriorDeg(landmarks, picked.lock)
-        : null;
-    const knee = imgKnee != null ? Math.min(imgKnee, picked.knee) : picked.knee;
+    const side = this.locked ?? "right";
+    const hipI = side === "left" ? 23 : 24;
+    const anI = side === "left" ? 27 : 28;
+    const hipLm = lmAt(landmarks, hipI);
+    const anLm = lmAt(landmarks, anI);
+
+    const imgKnee = imageKneeInteriorDeg(landmarks, side);
+    const knee =
+      imgKnee != null ? Math.min(imgKnee, picked.knee) : picked.knee;
     const flags: string[] = [];
     const label = (ok: string) =>
       track.level === "weak" ? track.reason : ok;
     const flexDisp = toFlexionDeg(knee);
 
-    if (this.phase === "down" && hip > 120) {
-      this.baselineHip = this.baselineHip * 0.9 + hip * 0.1;
+    if (!hipLm || !anLm) {
+      return {
+        reps: this.reps,
+        flags,
+        phaseLabel: label("Show hip and ankle of the working leg"),
+        setComplete: false,
+        track: track.level === "ok" ? "weak" : track.level,
+        trackReason: "Need hip and ankle in frame",
+        displayKneeDeg: flexDisp,
+      };
     }
+
+    if (this.phase === "down" && !this.baselineReady) {
+      const ang = Math.atan2(hipLm.y - anLm.y, anLm.x - hipLm.x);
+      this.baseAngleRad =
+        this.baselineSamples === 0
+          ? ang
+          : this.baseAngleRad + (ang - this.baseAngleRad) / (this.baselineSamples + 1);
+      this.baselineSamples += 1;
+      if (this.baselineSamples >= 10) this.baselineReady = true;
+    }
+
+    const elev = this.baselineReady
+      ? legElevationDeg(hipLm, anLm, this.baseAngleRad)
+      : 0;
 
     if (this.phase === "up") {
       if (knee < BENT_REFUSE) {
@@ -165,14 +224,10 @@ export class SlrMove implements ExerciseMove {
     }
 
     if (this.phase === "down") {
-      const hipDrop = this.baselineHip - hip;
-      const hipRise = hip - this.baselineHip;
-      const entering = hipDrop >= HIP_ENTER || hipRise >= HIP_ENTER;
-      if (entering) {
-        this.hipSign = hipDrop >= hipRise ? 1 : -1;
+      if (this.baselineReady && elev >= ELEV_ENTER) {
         this.phase = "up";
         this.upSinceMs = t;
-        this.peakHipFlex = hip;
+        this.peakElev = elev;
         this.bentLogged = false;
         this.bentThisRep = false;
         this.bentStreak = 0;
@@ -180,7 +235,11 @@ export class SlrMove implements ExerciseMove {
       return {
         reps: this.reps,
         flags,
-        phaseLabel: label("Lift the leg — knee straight"),
+        phaseLabel: label(
+          this.baselineReady
+            ? "Lift the leg — knee straight"
+            : "Hold still a moment — calibrating",
+        ),
         setComplete: false,
         track: track.level,
         trackReason: track.reason,
@@ -188,44 +247,40 @@ export class SlrMove implements ExerciseMove {
       };
     }
 
-    const sign = this.hipSign ?? 1;
-    if (sign === 1) {
-      if (hip < this.peakHipFlex) this.peakHipFlex = hip;
-    } else if (hip > this.peakHipFlex) {
-      this.peakHipFlex = hip;
-    }
+    if (elev > this.peakElev) this.peakElev = elev;
 
-    const hipExc =
-      sign === 1
-        ? this.baselineHip - this.peakHipFlex
-        : this.peakHipFlex - this.baselineHip;
-
-    const lowered =
-      sign === 1
-        ? hip >= this.baselineHip - 10
-        : hip <= this.baselineHip + 10;
+    const lowered = elev <= ELEV_RETURN;
     const heldLongEnough = t - this.upSinceMs >= MIN_UP_MS;
+    const gapOk = t - this.lastRepAt >= MIN_REP_GAP_MS;
 
     if (lowered && heldLongEnough) {
-      if (hipExc < HIP_MIN_LIFT) {
+      if (this.peakElev < ELEV_MIN) {
         flags.push("incompleteHeight");
         this.onFlag?.(
           "incompleteHeight",
           "Lift a bit higher — about a foot off the floor.",
         );
       } else if (this.bentThisRep) {
+        // Extreme bend: still count but cue — missed reps were the bigger pain.
         flags.push("bentKnee");
         this.onFlag?.(
           "bentKnee",
-          "That rep didn’t count — keep the knee straight next time.",
+          "Try to keep the knee straighter next time.",
         );
-      } else {
+        if (gapOk) {
+          this.reps += 1;
+          this.lastRepAt = t;
+          this.onRep?.(this.reps);
+          if (this.reps >= this.targetReps) this.setComplete = true;
+        }
+      } else if (gapOk) {
         this.reps += 1;
+        this.lastRepAt = t;
         this.onRep?.(this.reps);
         if (this.reps >= this.targetReps) this.setComplete = true;
       }
       this.phase = "down";
-      this.peakHipFlex = 180;
+      this.peakElev = 0;
       this.bentLogged = false;
       this.bentThisRep = false;
       this.bentStreak = 0;

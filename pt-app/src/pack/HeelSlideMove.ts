@@ -156,16 +156,21 @@ export class HeelSlideMove implements ExerciseMove {
       },
     );
 
-    if (
-      prevLock &&
-      picked.lock &&
-      picked.lock !== prevLock &&
-      !picked.kneesClose
-    ) {
-      this.markDirtyIfActive();
+    // Prescribed clinical side: never flip lock mid-set (deep slides were
+    // getting dirtied by L/R swaps → silent missed reps past the 90° cue).
+    if (this.side === "left" || this.side === "right") {
+      this.locked = this.side;
+    } else {
+      if (
+        prevLock &&
+        picked.lock &&
+        picked.lock !== prevLock &&
+        !picked.kneesClose
+      ) {
+        this.markDirtyIfActive();
+      }
+      if (picked.lock) this.locked = picked.lock;
     }
-
-    if (picked.lock) this.locked = picked.lock;
     if (picked.pos) {
       this.prevKneePos = this.lastKneePos;
       this.lastKneePos = picked.pos;
@@ -197,7 +202,7 @@ export class HeelSlideMove implements ExerciseMove {
         this.overLogged = true;
         this.onFlag?.(
           "overFlexion",
-          `Past your PT limit (${this.minKneeAngle}°) — ease the slide.`,
+          `Past your PT limit (${this.minKneeAngle}°) — ease the slide (rep still counts).`,
         );
       }
     }

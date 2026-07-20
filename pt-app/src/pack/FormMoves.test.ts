@@ -49,6 +49,18 @@ function legs(): JointLandmark[] {
   ];
 }
 
+/** Right-leg SLR pose — ankleY↓ = lift (image y grows downward). */
+function slrPose(ankleY: number): JointLandmark[] {
+  return [
+    lm(23, 0.35, 0.5),
+    lm(24, 0.5, 0.5),
+    lm(25, 0.45, 0.62),
+    lm(26, 0.62, 0.62),
+    lm(27, 0.55, 0.78),
+    lm(28, 0.72, ankleY),
+  ];
+}
+
 describe("StepUpMove", () => {
   it("counts a flex → rise cycle", () => {
     const onRep = vi.fn();
@@ -63,103 +75,103 @@ describe("StepUpMove", () => {
 });
 
 describe("SlrMove", () => {
+  function calibrate(move: SlrMove, t0: number): number {
+    let t = t0;
+    for (let i = 0; i < 12; i++) {
+      move.update(slrPose(0.78), sample(168, t, 165), t);
+      t += 33;
+    }
+    return t;
+  }
+
   it("flags bent knee during lift after sustained clear bend", () => {
     const onFlag = vi.fn();
-    const move = new SlrMove({ targetReps: 5, onFlag });
-    let t = 1000;
-    move.update(legs(), sample(168, t, 165), t);
+    const move = new SlrMove({ targetReps: 5, side: "right", onFlag });
+    let t = calibrate(move, 1000);
+    move.update(slrPose(0.5), sample(168, t, 140), t); // enter up
     t += 33;
-    move.update(legs(), sample(168, t, 140), t); // enter up
-    t += 33;
-    let r = move.update(legs(), sample(130, t, 130), t);
-    expect(r.flags).not.toContain("bentKnee"); // streak not yet / not refuse-level
-    for (let i = 0; i < 7; i++) {
+    let r = move.update(slrPose(0.48), sample(130, t, 130), t);
+    expect(r.flags).not.toContain("bentKnee");
+    for (let i = 0; i < 9; i++) {
       t += 33;
-      r = move.update(legs(), sample(110, t, 125), t); // clearly bent <120
+      r = move.update(slrPose(0.48), sample(110, t, 125), t);
     }
     expect(r.flags).toContain("bentKnee");
     expect(onFlag).toHaveBeenCalledWith("bentKnee", expect.stringContaining("straight"));
   });
 
-  it("does not refuse on mild 160° interior noise", () => {
+  it("still counts when knee is mildly noisy (~160°)", () => {
     const onRep = vi.fn();
     const onFlag = vi.fn();
-    const move = new SlrMove({ targetReps: 5, onRep, onFlag });
-    let t = 1000;
-    for (const hip of [165, 164, 163, 162]) {
-      move.update(legs(), sample(168, t, hip), t);
-      t += 33;
-    }
-    for (const hip of [148, 140, 132, 128]) {
-      // 160 interior = nearly straight clinically — must still count
-      move.update(legs(), sample(160, t, hip), t);
+    const move = new SlrMove({ targetReps: 5, side: "right", onRep, onFlag });
+    let t = calibrate(move, 1000);
+    for (const y of [0.65, 0.55, 0.48, 0.45]) {
+      move.update(slrPose(y), sample(160, t, 140), t);
       t += 100;
     }
-    t += 500;
-    move.update(legs(), sample(160, t, 158), t);
+    t += 400;
+    move.update(slrPose(0.78), sample(160, t, 160), t);
     expect(onRep).toHaveBeenCalledWith(1);
-    expect(onFlag).not.toHaveBeenCalledWith(
-      "bentKnee",
-      expect.stringContaining("didn’t count"),
-    );
   });
 
-  it("does not count a lift that bent the knee", () => {
+  it("counts a bent lift but cues to keep straighter", () => {
     const onRep = vi.fn();
     const onFlag = vi.fn();
-    const move = new SlrMove({ targetReps: 5, onRep, onFlag });
-    let t = 1000;
-    move.update(legs(), sample(168, t, 165), t);
+    const move = new SlrMove({ targetReps: 5, side: "right", onRep, onFlag });
+    let t = calibrate(move, 1000);
+    move.update(slrPose(0.5), sample(168, t, 140), t);
     t += 33;
-    move.update(legs(), sample(168, t, 140), t);
-    t += 33;
-    for (let i = 0; i < 8; i++) {
-      move.update(legs(), sample(110, t, 120), t); // clearly bent
-      t += 100;
+    for (let i = 0; i < 10; i++) {
+      move.update(slrPose(0.45), sample(110, t, 120), t);
+      t += 80;
     }
-    t += 500;
-    move.update(legs(), sample(160, t, 160), t);
-    expect(onRep).not.toHaveBeenCalled();
+    t += 400;
+    move.update(slrPose(0.78), sample(160, t, 160), t);
+    expect(onRep).toHaveBeenCalledWith(1);
     expect(onFlag).toHaveBeenCalledWith(
       "bentKnee",
-      expect.stringContaining("didn’t count"),
+      expect.stringContaining("straighter"),
     );
   });
 
-  it("counts a clean lift / lower", () => {
+  it("counts a clean lift / lower via ankle elevation", () => {
     const onRep = vi.fn();
-    const move = new SlrMove({ targetReps: 5, onRep });
-    let t = 1000;
-    for (const hip of [165, 164, 163, 162]) {
-      move.update(legs(), sample(168, t, hip), t);
-      t += 33;
-    }
-    for (const hip of [148, 140, 132, 128]) {
-      move.update(legs(), sample(168, t, hip), t);
+    const move = new SlrMove({ targetReps: 5, side: "right", onRep });
+    let t = calibrate(move, 1000);
+    for (const y of [0.7, 0.6, 0.5, 0.42]) {
+      move.update(slrPose(y), sample(168, t, 140), t);
       t += 100;
     }
-    // Still up — too soon to complete
-    move.update(legs(), sample(168, t, 158), t);
+    move.update(slrPose(0.42), sample(168, t, 130), t);
     expect(onRep).not.toHaveBeenCalled();
-    t += 500;
-    move.update(legs(), sample(168, t, 158), t);
+    t += 400;
+    move.update(slrPose(0.78), sample(168, t, 160), t);
     expect(onRep).toHaveBeenCalledWith(1);
   });
 
-  it("does not instant-count from ankle noise (hip must leave + hold)", () => {
+  it("debounces double-count from rapid elevation flicker", () => {
     const onRep = vi.fn();
-    const move = new SlrMove({ targetReps: 10, onRep });
-    let t = 1000;
-    // Flat on floor — hip stable; landmarks with jittery ankle Y must not fire
+    const move = new SlrMove({ targetReps: 10, side: "right", onRep });
+    let t = calibrate(move, 1000);
+    move.update(slrPose(0.45), sample(168, t), t);
+    t += 400;
+    move.update(slrPose(0.78), sample(168, t), t); // count 1
+    t += 50;
+    move.update(slrPose(0.45), sample(168, t), t);
+    t += 400;
+    move.update(slrPose(0.78), sample(168, t), t); // too soon
+    expect(onRep).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not count from resting ankle jitter alone", () => {
+    const onRep = vi.fn();
+    const move = new SlrMove({ targetReps: 10, side: "right", onRep });
+    let t = calibrate(move, 1000);
     for (let i = 0; i < 30; i++) {
-      const marks = legs().map((l) =>
-        l.index === 28 ? { ...l, y: 0.72 + (i % 3) * 0.02 } : l,
-      );
-      move.update(marks, sample(168, t, 162), t);
+      move.update(slrPose(0.78 + (i % 3) * 0.005), sample(168, t, 162), t);
       t += 33;
     }
     expect(onRep).not.toHaveBeenCalled();
-    expect(move.update(legs(), sample(168, t, 162), t).reps).toBe(0);
   });
 });
 
