@@ -53,6 +53,7 @@ export function createKneeV1Moves(hooks: {
     }),
     new SlrMove({
       targetReps: reps,
+      side,
       onFlag: hooks.onSlrFlag,
       onRep: hooks.onSlrRep,
     }),

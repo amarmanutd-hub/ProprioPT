@@ -63,7 +63,7 @@ describe("StepUpMove", () => {
 });
 
 describe("SlrMove", () => {
-  it("flags bent knee during lift", () => {
+  it("flags bent knee during lift after sustained bend", () => {
     const onFlag = vi.fn();
     const move = new SlrMove({ targetReps: 5, onFlag });
     let t = 1000;
@@ -71,7 +71,12 @@ describe("SlrMove", () => {
     t += 33;
     move.update(legs(), sample(168, t, 140), t); // enter up
     t += 33;
-    const r = move.update(legs(), sample(130, t, 130), t); // bent
+    let r = move.update(legs(), sample(130, t, 130), t);
+    expect(r.flags).not.toContain("bentKnee"); // streak not yet
+    for (let i = 0; i < 4; i++) {
+      t += 33;
+      r = move.update(legs(), sample(130, t, 125), t);
+    }
     expect(r.flags).toContain("bentKnee");
     expect(onFlag).toHaveBeenCalledWith("bentKnee", expect.stringContaining("straight"));
   });
@@ -85,14 +90,32 @@ describe("SlrMove", () => {
     t += 33;
     move.update(legs(), sample(168, t, 140), t);
     t += 33;
-    move.update(legs(), sample(130, t, 120), t); // bent mid-lift
-    t += 33;
+    for (let i = 0; i < 5; i++) {
+      move.update(legs(), sample(130, t, 120), t); // bent mid-lift
+      t += 33;
+    }
     move.update(legs(), sample(160, t, 160), t); // lower
     expect(onRep).not.toHaveBeenCalled();
     expect(onFlag).toHaveBeenCalledWith(
       "bentKnee",
       expect.stringContaining("didn’t count"),
     );
+  });
+
+  it("counts a clean lift / lower", () => {
+    const onRep = vi.fn();
+    const move = new SlrMove({ targetReps: 5, onRep });
+    let t = 1000;
+    for (const hip of [165, 164, 163, 162]) {
+      move.update(legs(), sample(168, t, hip), t);
+      t += 33;
+    }
+    for (const hip of [148, 140, 132, 128]) {
+      move.update(legs(), sample(168, t, hip), t);
+      t += 33;
+    }
+    move.update(legs(), sample(168, t, 158), t);
+    expect(onRep).toHaveBeenCalledWith(1);
   });
 });
 

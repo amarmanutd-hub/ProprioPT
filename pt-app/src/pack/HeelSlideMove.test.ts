@@ -207,6 +207,40 @@ describe("HeelSlideMove", () => {
     expect(r.track).toBe("weak");
   });
 
+  it("shows clinical flexion (0≈straight) not interior angle", () => {
+    const move = new HeelSlideMove({ targetReps: 5 });
+    const r = move.update(separatedLegs(), sample(160, 1000), 1000);
+    expect(r.displayKneeDeg).toBeCloseTo(20, 0);
+  });
+
+  it("still counts when deep flex happens under knee overlap", () => {
+    const onRep = vi.fn();
+    const move = new HeelSlideMove({ targetReps: 2, onRep });
+    let t = 1000;
+    for (const k of [165, 164, 163, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    const overlap = [
+      lmAt(23, 0.4, 0.4),
+      lmAt(24, 0.42, 0.4),
+      lmAt(25, 0.5, 0.55),
+      lmAt(26, 0.51, 0.55),
+      lmAt(27, 0.5, 0.7),
+      lmAt(28, 0.51, 0.7),
+    ];
+    // Enter flex while overlapped (this used to stall the FSM).
+    for (const k of [150, 140, 130, 120]) {
+      move.update(overlap, sample(k, t), t);
+      t += 33;
+    }
+    for (const k of [130, 140, 150, 158, 162]) {
+      move.update(separatedLegs(), sample(k, t), t);
+      t += 33;
+    }
+    expect(onRep).toHaveBeenCalledWith(1);
+  });
+
   it("still counts when knees overlap mid-rep if lock is held", () => {
     const onRep = vi.fn();
     const move = new HeelSlideMove({ targetReps: 2, onRep });
